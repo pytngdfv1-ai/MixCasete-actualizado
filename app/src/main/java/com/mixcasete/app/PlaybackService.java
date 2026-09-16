@@ -9,11 +9,26 @@ import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.MediaMetadata;
 import android.media.MediaPlayer;
+import android.media.session.MediaSession;
+import android.media.session.PlaybackState;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.view.KeyEvent;
 
+/**
+ * Servicio de reproducción en primer plano.
+ *
+ * Usa android.media.session.MediaSession (nativo de Android, sin dependencias
+ * extra) para que:
+ *  - El sistema reconozca esto como reproducción de música "legítima" en curso
+ *    (mejora cómo Doze/el ahorro de batería de fabricantes trata al servicio,
+ *    sin tener que pedir permisos especiales al usuario).
+ *  - Aparezcan controles en la PANTALLA DE BLOQUEO y en auriculares/Bluetooth.
+ *  - Los botones físicos de reproducir/pausar (auriculares, etc.) funcionen.
+ */
 public class PlaybackService extends Service implements MediaPlayer.OnPreparedListener,
         MediaPlayer.OnCompletionListener, MediaPlayer.OnErrorListener {
 
@@ -21,13 +36,16 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     public static final String EXTRA_CMD = "cmd";
     public static final String EXTRA_URL = "url";
     public static final String EXTRA_TITLE = "title";
+    public static final String EXTRA_ARTIST = "artist";
     public static final String EXTRA_SEEK = "seek";
 
     private PowerManager.WakeLock wl;
     private AudioManager audioManager;
     private AudioFocusRequest focusRequest;
     private MediaPlayer player;
+    private MediaSession mediaSession;
     private String currentTitle = "Mix.Casete";
+    private String currentArtist = "";
     private boolean prepared = false;
 
     public static void start(android.content.Context c, Intent i) {
@@ -45,7 +63,54 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     public void onCreate() {
         super.onCreate();
         crearCanal();
+        setupMediaSession();
         startForeground(1, buildNotif("Mix.Casete", false));
+    }
+
+    private void setupMediaSession() {
+        mediaSession = new MediaSession(this, "MixCaseteSession");
+        mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
+                | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+        mediaSession.setCallback(new MediaSession.Callback() {
+            @Override public void onPlay() { doCmd("play"); }
+            @Override public void onPause() { doCmd("pause"); }
+            @Override public void onStop() { doCmd("stop"); }
+            @Override public void onSeekTo(long pos) {
+                if (player != null && prepared) player.seekTo((int) pos);
+            }
+            @Override
+            public boolean onMediaButtonEvent(Intent mediaButtonIntent) {
+                Object evObj = mediaButtonIntent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+                if (evObj instanceof KeyEvent) {
+                    KeyEvent ev = (KeyEvent) evObj;
+                    if (ev.getAction() == KeyEvent.ACTION_DOWN) {
+                        int code = ev.getKeyCode();
+                        if (code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+                            if (player != null && player.isPlaying()) doCmd("pause"); else doCmd("play");
+                            return true;
+                        } else if (code == KeyEvent.KEYCODE_MEDIA_PLAY) { doCmd("play"); return true; }
+                        else if (code == KeyEvent.KEYCODE_MEDIA_PAUSE) { doCmd("pause"); return true; }
+                        else if (code == KeyEvent.KEYCODE_MEDIA_STOP) { doCmd("stop"); return true; }
+                        else if (code == KeyEvent.KEYCODE_MEDIA_NEXT
+                                || code == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+                            notifyJs(code == KeyEvent.KEYCODE_MEDIA_NEXT ? "btn_next" : "btn_prev");
+                            return true;
+                        }
+                    }
+                }
+                return super.onMediaButtonEvent(mediaButtonIntent);
+            }
+        });
+        mediaSession.setActive(true);
+    }
+
+    /** Ejecuta el mismo camino que un comando llegado por Intent, para que
+     *  los botones de auriculares/pantalla de bloqueo hagan lo mismo que los
+     *  botones dentro de la app. */
+    private void doCmd(String cmd) {
+        Intent i = new Intent(this, PlaybackService.class);
+        i.putExtra(EXTRA_CMD, cmd);
+        onStartCommand(i, 0, 0);
     }
 
     @Override
@@ -59,13 +124,16 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             case "play_url":
                 String url = intent.getStringExtra(EXTRA_URL);
                 String title = intent.getStringExtra(EXTRA_TITLE);
+                String artist = intent.getStringExtra(EXTRA_ARTIST);
                 if (title != null) currentTitle = title;
+                currentArtist = artist != null ? artist : "";
                 startPlayback(url);
                 break;
             case "play":
                 if (player != null && prepared) {
                     player.start();
                     requestAudioFocus();
+                    updatePlaybackState(true);
                     updateNotif(true);
                     notifyJs("playing");
                 }
@@ -73,6 +141,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             case "pause":
                 if (player != null && prepared) {
                     player.pause();
+                    updatePlaybackState(false);
                     updateNotif(false);
                     notifyJs("paused");
                 }
@@ -95,6 +164,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         releasePlayer();
         requestAudioFocus();
         acquireWakeLock();
+        updateMetadata();
 
         try {
             player = new MediaPlayer();
@@ -116,12 +186,14 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     public void onPrepared(MediaPlayer mp) {
         prepared = true;
         mp.start();
+        updatePlaybackState(true);
         updateNotif(true);
         notifyJs("playing");
     }
 
     @Override
     public void onCompletion(MediaPlayer mp) {
+        updatePlaybackState(false);
         notifyJs("ended");
         updateNotif(false);
     }
@@ -137,6 +209,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         releasePlayer();
         releaseWakeLock();
         releaseAudioFocus();
+        if (mediaSession != null) mediaSession.setActive(false);
     }
 
     private void releasePlayer() {
@@ -162,6 +235,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                     .setOnAudioFocusChangeListener(focus -> {
                         if (focus == AudioManager.AUDIOFOCUS_LOSS && player != null && player.isPlaying()) {
                             player.pause();
+                            updatePlaybackState(false);
                             updateNotif(false);
                             notifyJs("paused");
                         }
@@ -196,6 +270,34 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         if (wl != null && wl.isHeld()) wl.release();
     }
 
+    /** Metadata (título/artista) que ve el sistema: pantalla de bloqueo,
+     *  reloj/auto, auriculares con pantalla, etc. */
+    private void updateMetadata() {
+        if (mediaSession == null) return;
+        MediaMetadata md = new MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_TITLE, currentTitle)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST,
+                        currentArtist == null || currentArtist.isEmpty() ? "Mix.Casete" : currentArtist)
+                .build();
+        mediaSession.setMetadata(md);
+    }
+
+    private void updatePlaybackState(boolean playing) {
+        if (mediaSession == null) return;
+        long pos = 0;
+        try { if (player != null && prepared) pos = player.getCurrentPosition(); } catch (Exception e) {}
+        PlaybackState st = new PlaybackState.Builder()
+                .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
+                        | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP
+                        | PlaybackState.ACTION_SEEK_TO | PlaybackState.ACTION_SKIP_TO_NEXT
+                        | PlaybackState.ACTION_SKIP_TO_PREVIOUS)
+                .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
+                        pos, playing ? 1f : 0f)
+                .build();
+        mediaSession.setPlaybackState(st);
+        mediaSession.setActive(true);
+    }
+
     private Notification buildNotif(String title, boolean playing) {
         Intent pause = new Intent(this, PlaybackService.class).putExtra(EXTRA_CMD, playing ? "pause" : "play");
         Intent stop = new Intent(this, PlaybackService.class).putExtra(EXTRA_CMD, "stop");
@@ -210,7 +312,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         Notification.Builder b = (Build.VERSION.SDK_INT >= 26)
                 ? new Notification.Builder(this, CHANNEL)
                 : new Notification.Builder(this);
-        return b.setContentTitle(title)
+        b.setContentTitle(title)
                 .setContentText(playing ? "▶ Reproduciendo" : "❚❚ En pausa")
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentIntent(pOpen)
@@ -218,8 +320,15 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                 .addAction(playing
                         ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
                         playing ? "Pausa" : "Seguir", pP)
-                .addAction(android.R.drawable.ic_delete, "Parar", pS)
-                .build();
+                .addAction(android.R.drawable.ic_delete, "Parar", pS);
+
+        if (mediaSession != null) {
+            Notification.MediaStyle style = new Notification.MediaStyle();
+            style.setMediaSession(mediaSession.getSessionToken());
+            style.setShowActionsInCompactView(0, 1);
+            b.setStyle(style);
+        }
+        return b.build();
     }
 
     private void updateNotif(boolean playing) {
@@ -246,6 +355,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     @Override
     public void onDestroy() {
         stopPlayback();
+        if (mediaSession != null) mediaSession.release();
         super.onDestroy();
     }
 }

@@ -3,7 +3,6 @@ package com.mixcasete.app;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ContentValues;
-import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.media.AudioManager;
@@ -11,10 +10,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.PowerManager;
 import android.os.SystemClock;
 import android.provider.MediaStore;
-import android.provider.Settings;
 import android.view.MotionEvent;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -52,6 +49,8 @@ public class MainActivity extends Activity {
 
     private WebView wv;
     private WebView playerWv;
+    private FrameLayout rootLayout;
+    private android.widget.TextView videoCloseBtn;
 
     private boolean polling = false;
     private int noVideoCount = 0;
@@ -73,6 +72,7 @@ public class MainActivity extends Activity {
         self = new WeakReference<>(this);
 
         FrameLayout root = new FrameLayout(this);
+        rootLayout = root;
 
         wv = new WebView(this);
         config(wv.getSettings());
@@ -96,33 +96,7 @@ public class MainActivity extends Activity {
         /* Limpia respaldos duplicados de la playlist al abrir (una sola vez en fondo) */
         new Thread(() -> cleanupDuplicateBackups()).start();
 
-        /* Pide excluir la app de la optimización de batería, para que el audio
-           en segundo plano (pantalla apagada) no lo mate el sistema/fabricante. */
-        requestIgnoreBatteryOptimizations();
-
         wv.loadUrl("file:///android_asset/index.html");
-    }
-
-    /**
-     * Muestra el diálogo estándar de Android para excluir la app de la optimización
-     * de batería. Solo lo pide si aún no está excluida; el usuario puede rechazarlo
-     * (la app seguirá funcionando igual, solo con más riesgo de que el sistema
-     * corte la reproducción en segundo plano en fabricantes agresivos como
-     * Xiaomi/Huawei/Samsung).
-     */
-    private void requestIgnoreBatteryOptimizations() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
-        try {
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            String pkg = getPackageName();
-            if (pm != null && !pm.isIgnoringBatteryOptimizations(pkg)) {
-                Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                i.setData(Uri.parse("package:" + pkg));
-                startActivity(i);
-            }
-        } catch (Exception e) {
-            // Algunos fabricantes restringen este intent; si falla, simplemente se omite.
-        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -158,10 +132,15 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void nativePlay(final String url, final String title) {
+            nativePlay(url, title, "");
+        }
+        @JavascriptInterface
+        public void nativePlay(final String url, final String title, final String artist) {
             Intent i = new Intent(MainActivity.this, PlaybackService.class);
             i.putExtra(PlaybackService.EXTRA_CMD, "play_url");
             i.putExtra(PlaybackService.EXTRA_URL, url);
             i.putExtra(PlaybackService.EXTRA_TITLE, title != null ? title : "Mix.Casete");
+            i.putExtra(PlaybackService.EXTRA_ARTIST, artist != null ? artist : "");
             PlaybackService.start(MainActivity.this, i);
         }
         @JavascriptInterface
@@ -188,6 +167,56 @@ public class MainActivity extends Activity {
             i.putExtra(PlaybackService.EXTRA_CMD, "seek");
             i.putExtra(PlaybackService.EXTRA_SEEK, sec);
             PlaybackService.start(MainActivity.this, i);
+        }
+
+        @JavascriptInterface
+        public void showVideoOverlay(final String id) {
+            runOnUiThread(() -> {
+                try {
+                    android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+                    int size = (int) (Math.min(dm.widthPixels, dm.heightPixels) * 0.92f);
+                    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
+                    lp.gravity = android.view.Gravity.CENTER;
+                    playerWv.setLayoutParams(lp);
+                    playerWv.setAlpha(1f);
+                    playerWv.loadUrl("https://www.youtube.com/watch?v=" + id
+                            + "&playsinline=1");
+
+                    if (videoCloseBtn == null) {
+                        videoCloseBtn = new android.widget.TextView(MainActivity.this);
+                        videoCloseBtn.setText("✕");
+                        videoCloseBtn.setTextSize(20);
+                        videoCloseBtn.setTextColor(0xFFFFFFFF);
+                        videoCloseBtn.setBackgroundColor(0x99000000);
+                        int pad = (int) (10 * getResources().getDisplayMetrics().density);
+                        videoCloseBtn.setPadding(pad, pad / 2, pad, pad / 2);
+                        videoCloseBtn.setOnClickListener(v -> {
+                            hideVideoOverlay();
+                            wv.evaluateJavascript(
+                                "window.onVideoOverlayClosed && window.onVideoOverlayClosed()", null);
+                        });
+                        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+                        clp.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+                        int margin = (int) (18 * getResources().getDisplayMetrics().density);
+                        clp.topMargin = margin; clp.rightMargin = margin;
+                        rootLayout.addView(videoCloseBtn, clp);
+                    }
+                    videoCloseBtn.setVisibility(android.view.View.VISIBLE);
+                } catch (Exception e) {}
+            });
+        }
+
+        @JavascriptInterface
+        public void hideVideoOverlay() {
+            runOnUiThread(() -> {
+                try {
+                    playerWv.loadUrl("about:blank");
+                    playerWv.setAlpha(0f);
+                    playerWv.setLayoutParams(new FrameLayout.LayoutParams(1, 1));
+                    if (videoCloseBtn != null) videoCloseBtn.setVisibility(android.view.View.GONE);
+                } catch (Exception e) {}
+            });
         }
 
         @JavascriptInterface
@@ -258,6 +287,15 @@ public class MainActivity extends Activity {
                 return;
             }
             doExport(json);
+        }
+
+        @JavascriptInterface
+        public void exportPdf(final String base64Data, final String fileName) {
+            new Thread(() -> {
+                final boolean ok = writeBytesToDownloads(base64Data, fileName);
+                runOnUiThread(() -> wv.evaluateJavascript(
+                    "window.onPdfExported && window.onPdfExported(" + ok + ")", null));
+            }).start();
         }
 
         @JavascriptInterface
@@ -383,6 +421,34 @@ public class MainActivity extends Activity {
                 File f = new File(dir, "MixCasete_playlist.json");
                 FileOutputStream os = new FileOutputStream(f);
                 os.write(json.getBytes("UTF-8"));
+                os.close();
+                return true;
+            }
+        } catch (Exception e) { return false; }
+    }
+
+    /* Guarda un archivo binario (ej. PDF) en Descargas, decodificado desde base64. */
+    private boolean writeBytesToDownloads(String base64Data, String fileName) {
+        try {
+            byte[] data = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+            String safeName = (fileName == null || fileName.trim().isEmpty())
+                    ? "MixCasete_export.pdf" : fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                cv.put(MediaStore.Downloads.MIME_TYPE, "application/pdf");
+                cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                Uri target = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (target == null) return false;
+                OutputStream os = getContentResolver().openOutputStream(target);
+                os.write(data);
+                os.close();
+                return true;
+            } else {
+                File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                File f = new File(dir, safeName);
+                FileOutputStream os = new FileOutputStream(f);
+                os.write(data);
                 os.close();
                 return true;
             }

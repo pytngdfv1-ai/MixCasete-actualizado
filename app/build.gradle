@@ -29,8 +29,8 @@ android {
 }
 
 dependencies {
-    // Antes: com.github.TeamNewPipe:NewPipeExtractor:dev-SNAPSHOT (versión flotante inestable)
-    // Ahora: fork mantenido por maxrave-dev (el mismo que usa SimpMusic en producción),
-    // fijado a un commit concreto en vez de un SNAPSHOT que cambia sin aviso.
-    implementation 'com.github.maxrave-dev:BravePipeExtractor:0fcaf19ecc'
+    // Revertido: BravePipeExtractor entregaba una URL "válida" (el título/portada
+    // cambiaban) pero sin audio real con el MediaPlayer nativo de Android.
+    // Se vuelve a la versión original que sí reproducía correctamente.
+    implementation 'com.github.TeamNewPipe:NewPipeExtractor:dev-SNAPSHOT'
 }

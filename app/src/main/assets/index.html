@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://itunes.apple.com" crossorigin>
 <link href="https://cdn.jsdelivr.net/fontsource/css/oswald@latest/latin-700.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/fontsource/css/montserrat@latest/latin-800.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -621,6 +622,30 @@
     font-size: 10px; font-weight: 800; letter-spacing: 2px;
     color: #4a3c28; margin-bottom: 6px;
   }
+  .cover-menu-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: none; align-items: center; justify-content: center;
+    z-index: 9999;
+  }
+  .cover-menu-overlay.open { display: flex; }
+  .cover-menu-box {
+    background: #fdf6e6; border: 2px solid #b3770a; border-radius: 14px;
+    padding: 14px; display: flex; flex-direction: column; gap: 8px;
+    width: 78%; max-width: 320px;
+  }
+  .cover-menu-box button {
+    padding: 12px 8px;
+    background: linear-gradient(180deg, #f7a929 0%, #e78d10 100%);
+    border: 2px solid #b3770a; border-radius: 8px; color: #fff;
+    font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 13px;
+    cursor: pointer; box-shadow: 0 3px 0 #b3770a;
+  }
+  .cover-menu-box button:active { transform: translateY(2px); box-shadow: none; }
+  .cover-menu-box button#coverMenuCancel {
+    background: transparent; color: #6b5a3e; box-shadow: none; border-color: #d8c9a8;
+  }
+  body.dark .cover-menu-box { background: #241f18; border-color: #4a443c; }
+  body.dark .cover-menu-box button#coverMenuCancel { color: #d9d2c4; }
   .info-lyrics {
     flex: 1;
     overflow-y: auto;
@@ -984,10 +1009,20 @@
     <div class="info-links">
       <button id="infoOpenYt">▶ VER EN YOUTUBE</button>
       <button id="infoCopyYt">📋 COPIAR LINK</button>
+      <button id="infoExportPdf">📄 EXPORTAR PDF</button>
     </div>
     <div class="info-lyrics-title">🎤 LETRA</div>
     <div class="info-lyrics" id="infoLyrics">⏳ Buscando letra...</div>
     <button class="info-close" id="infoClose">✕ CERRAR</button>
+  </div>
+</div>
+
+<div class="cover-menu-overlay" id="coverMenuOverlay">
+  <div class="cover-menu-box">
+    <button id="coverMenuArt">🖼️ Ver portada</button>
+    <button id="coverMenuVideo">▶ Ver video</button>
+    <button id="coverMenuLyrics">🎤 Ver letra</button>
+    <button id="coverMenuCancel">Cancelar</button>
   </div>
 </div>
 
@@ -1135,6 +1170,73 @@ document.getElementById('infoCopyYt').onclick = () => {
   copyText(ytUrlOf(infoTrack.id), '📋 Link copiado');
 };
 
+function imgToDataUrl(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        resolve(c.toDataURL('image/jpeg', 0.9));
+      } catch (e) { resolve(null); } // imagen "tainted" por CORS: se sigue sin portada
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+window.onPdfExported = function (ok) {
+  debug(ok ? '📄 PDF guardado en Descargas' : '⚠ No se pudo guardar el PDF');
+};
+
+document.getElementById('infoExportPdf').onclick = async () => {
+  if (!infoTrack) return;
+  const btn = document.getElementById('infoExportPdf');
+  const prevTxt = btn.textContent;
+  btn.textContent = '⏳ Generando...'; btn.disabled = true;
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const title = infoTrack.title || 'Tema';
+    const artist = infoTrack.author || '';
+    const lyricsText = document.getElementById('infoLyrics').textContent || '';
+    let y = 50;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+    doc.text(title, 40, y, { maxWidth: 500 }); y += 26;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(12);
+    doc.text(artist, 40, y); y += 20;
+
+    const imgUrl = document.getElementById('infoCover').src;
+    const dataUrl = await imgToDataUrl(imgUrl);
+    if (dataUrl) { doc.addImage(dataUrl, 'JPEG', 40, y, 150, 150); }
+    y += 170;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.text('🎤 LETRA', 40, y); y += 18;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    const lines = doc.splitTextToSize(lyricsText.trim() || 'Letra no disponible.', 510);
+    lines.forEach(line => {
+      if (y > 780) { doc.addPage(); y = 50; }
+      doc.text(line, 40, y); y += 13;
+    });
+
+    const fname = 'MixCasete_' + title.replace(/[^a-z0-9áéíóúñ]+/gi, '_').slice(0, 40) + '.pdf';
+    if (HAS_BRIDGE && typeof Android.exportPdf === 'function') {
+      const base64 = doc.output('datauristring').split(',')[1];
+      Android.exportPdf(base64, fname);
+    } else {
+      doc.save(fname);
+      debug('📄 PDF descargado');
+    }
+  } catch (e) {
+    debug('⚠ No se pudo generar el PDF');
+  } finally {
+    btn.textContent = prevTxt; btn.disabled = false;
+  }
+};
+
 function copyText(txt, msg) {
   const done = () => {
     const b = document.getElementById('infoCopyYt');
@@ -1178,28 +1280,56 @@ async function fetchYear(t) {
 function cleanLyrics(s) {
   return String(s).replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
+/* Limpia ruido típico de títulos de YouTube para buscar letras mejor:
+   "(Video Oficial)", "[HD]", "| Lo Mejor del Rock Argentino", "Official Audio", etc. */
+function cleanTitleForSearch(s) {
+  return String(s || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\|.*/g, ' ')
+    .replace(/\b(official\s*(video|audio|music\s*video|lyric\s*video)?|video\s*oficial|audio\s*oficial|lyrics?|hd|hq|4k|remaster(ed)?|full\s*album)\b/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 async function fetchLyrics(t) {
   const el = document.getElementById('infoLyrics');
   el.textContent = '⏳ Buscando letra...';
-  const artist = (t.author && t.author !== 'YouTube') ? t.author : (guessArtist(t.title) || '');
-  const title = t.title || '';
-  try {
-    const r = await fetchTimeout('https://lrclib.net/api/get?artist_name=' +
-      encodeURIComponent(artist) + '&track_name=' + encodeURIComponent(title), 8000);
-    if (r.ok) {
-      const j = await r.json();
-      const ly = j.plainLyrics || j.syncedLyrics || '';
-      if (ly && ly.trim()) { el.textContent = cleanLyrics(ly); return; }
-    }
-  } catch (e) {}
-  try {
-    const r2 = await fetchTimeout('https://api.lyrics.ovh/v1/' +
-      encodeURIComponent(artist) + '/' + encodeURIComponent(title), 8000);
-    if (r2.ok) {
-      const j2 = await r2.json();
-      if (j2.lyrics && j2.lyrics.trim()) { el.textContent = cleanLyrics(j2.lyrics); return; }
-    }
-  } catch (e) {}
+  const rawTitle = t.title || '';
+  const parsedArtist = guessArtist(rawTitle); // "Artista - Tema" dentro del título
+  const parsedSong = parsedArtist ? rawTitle.split(' - ').slice(1).join(' - ') : rawTitle;
+  const channelName = (t.author && t.author !== 'YouTube') ? t.author : '';
+
+  // Candidatos en orden de confiabilidad: primero lo parseado del título
+  // (más fiable cuando el canal es un recopilatorio, no el artista real),
+  // luego el nombre del canal, luego solo el título limpio sin artista.
+  const candidates = [];
+  if (parsedArtist) candidates.push({ artist: parsedArtist, song: cleanTitleForSearch(parsedSong) });
+  if (channelName) candidates.push({ artist: channelName, song: cleanTitleForSearch(parsedSong || rawTitle) });
+  candidates.push({ artist: '', song: cleanTitleForSearch(rawTitle) });
+
+  for (const c of candidates) {
+    if (!c.song) continue;
+    try {
+      const url = c.artist
+        ? 'https://lrclib.net/api/get?artist_name=' + encodeURIComponent(c.artist) + '&track_name=' + encodeURIComponent(c.song)
+        : 'https://lrclib.net/api/search?track_name=' + encodeURIComponent(c.song);
+      const r = await fetchTimeout(url, 8000);
+      if (r.ok) {
+        const j = await r.json();
+        const hit = Array.isArray(j) ? j[0] : j;
+        const ly = hit && (hit.plainLyrics || hit.syncedLyrics);
+        if (ly && ly.trim()) { el.textContent = cleanLyrics(ly); return; }
+      }
+    } catch (e) {}
+    try {
+      const r2 = await fetchTimeout('https://api.lyrics.ovh/v1/' +
+        encodeURIComponent(c.artist || 'various') + '/' + encodeURIComponent(c.song), 8000);
+      if (r2.ok) {
+        const j2 = await r2.json();
+        if (j2.lyrics && j2.lyrics.trim()) { el.textContent = cleanLyrics(j2.lyrics); return; }
+      }
+    } catch (e) {}
+  }
   el.textContent = '😞 Letra no disponible para este tema.';
 }
 
@@ -1247,11 +1377,35 @@ function setZoom(ns) {
   if (cov.s === 1) { cov.tx = 0; cov.ty = 0; }
   clampCov(); applyCov();
 }
-albumSquare.addEventListener('click', () => {
+const coverMenuOverlay = document.getElementById('coverMenuOverlay');
+function openCoverZoom() {
   coverFullImg.src = albumImg.src;
   cov.s = 1; cov.tx = 0; cov.ty = 0; applyCov();
   coverOverlay.classList.add('open');
+}
+albumSquare.addEventListener('click', () => {
+  if (!current.id) { openCoverZoom(); return; } // sin tema activo: ir directo al zoom
+  coverMenuOverlay.classList.add('open');
 });
+coverMenuOverlay.onclick = e => { if (e.target === coverMenuOverlay) coverMenuOverlay.classList.remove('open'); };
+document.getElementById('coverMenuCancel').onclick = () => coverMenuOverlay.classList.remove('open');
+document.getElementById('coverMenuArt').onclick = () => { coverMenuOverlay.classList.remove('open'); openCoverZoom(); };
+document.getElementById('coverMenuLyrics').onclick = () => { coverMenuOverlay.classList.remove('open'); openInfo(current); };
+document.getElementById('coverMenuVideo').onclick = () => {
+  coverMenuOverlay.classList.remove('open');
+  if (!current.id) return;
+  if (HAS_BRIDGE && typeof Android.showVideoOverlay === 'function') {
+    doPause();
+    Android.showVideoOverlay(current.id);
+  } else {
+    const url = ytUrlOf(current.id);
+    const w = window.open(url, '_blank');
+    if (!w) copyText(url, '🔗 Link copiado');
+  }
+};
+window.onVideoOverlayClosed = function () {
+  debug('Video cerrado');
+};
 document.getElementById('coverClose').onclick = () => coverOverlay.classList.remove('open');
 document.getElementById('zoomIn').onclick = () => setZoom(cov.s + 0.5);
 document.getElementById('zoomOut').onclick = () => setZoom(cov.s - 0.5);
@@ -1810,7 +1964,7 @@ function startStream(url, title, src) {
     setRealTitle(displayName);
     if (src && src.author) setArtist(src.author);
     nativePos = 0;
-    try { Android.nativePlay(url, displayName); } catch (e) { debug('nativePlay error'); }
+    try { Android.nativePlay(url, displayName, (src && src.author) || current.author || ''); } catch (e) { debug('nativePlay error'); }
     return;
   }
 
