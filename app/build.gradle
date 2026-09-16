@@ -1,0 +1,36 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.mixcasete.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mixcasete.app"
+        minSdk 21
+        targetSdk 34
+        versionCode 2
+        versionName "1.1"
+    }
+
+    buildTypes {
+        release { minifyEnabled false }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+    }
+}
+
+dependencies {
+    // Antes: com.github.TeamNewPipe:NewPipeExtractor:dev-SNAPSHOT (versión flotante inestable)
+    // Ahora: fork mantenido por maxrave-dev (el mismo que usa SimpMusic en producción),
+    // fijado a un commit concreto en vez de un SNAPSHOT que cambia sin aviso.
+    implementation 'com.github.maxrave-dev:BravePipeExtractor:0fcaf19ecc'
+}
