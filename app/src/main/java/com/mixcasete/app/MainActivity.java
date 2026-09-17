@@ -96,7 +96,21 @@ public class MainActivity extends Activity {
         /* Limpia respaldos duplicados de la playlist al abrir (una sola vez en fondo) */
         new Thread(() -> cleanupDuplicateBackups()).start();
 
+        requestNotifPermission();
+
         wv.loadUrl("file:///android_asset/index.html");
+    }
+
+    /** Desde Android 13 (API 33) hay que pedir este permiso en tiempo de
+     *  ejecución o la notificación de reproducción (y sus controles en
+     *  pantalla de bloqueo) nunca se muestra, aunque esté en el manifiesto. */
+    private void requestNotifPermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 501);
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -697,10 +711,6 @@ public class MainActivity extends Activity {
     }
 
     private void enforce() {
-        try {
-            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
-            if (am != null) am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
-        } catch (Throwable t) {}
         playerWv.evaluateJavascript(
             "(function(){var v=document.querySelector('video');" +
             "if(!v)return 'novideo';" +
