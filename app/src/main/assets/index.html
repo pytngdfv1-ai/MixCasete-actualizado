@@ -1417,6 +1417,7 @@ document.getElementById('coverMenuVideo').onclick = () => {
 };
 window.onVideoOverlayClosed = function () {
   debug('Video cerrado');
+  if (mode === 'native') { try { Android.nativeResume(); } catch (e) {} }
 };
 document.getElementById('coverClose').onclick = () => coverOverlay.classList.remove('open');
 document.getElementById('zoomIn').onclick = () => setZoom(cov.s + 0.5);

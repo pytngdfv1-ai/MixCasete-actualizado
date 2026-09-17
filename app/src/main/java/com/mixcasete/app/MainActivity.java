@@ -206,6 +206,7 @@ public class MainActivity extends Activity {
         public void hideVideoOverlay() {
             runOnUiThread(() -> {
                 try {
+                    stopPoll();
                     playerWv.loadUrl("about:blank");
                     playerWv.setAlpha(0f);
                     playerWv.setLayoutParams(new FrameLayout.LayoutParams(1, 1));
@@ -715,10 +716,12 @@ public class MainActivity extends Activity {
         polling = true;
         final Runnable[] r = new Runnable[1];
         r[0] = () -> {
+            if (!polling) return; // se cerró el video: no seguir sondeando
             playerWv.evaluateJavascript(
                 "(function(){var v=document.querySelector('video');if(!v)return null;" +
                 "return JSON.stringify({t:v.currentTime||0,p:v.paused,e:v.ended,m:v.muted});})()",
                 value -> {
+                    if (!polling) return;
                     if (value == null || value.equals("null")) {
                         noVideoCount++;
                         if (noVideoCount > 4 && !triedAlt && lastId != null) {
@@ -737,9 +740,16 @@ public class MainActivity extends Activity {
                         "window.onBridgeState && window.onBridgeState(" + value + ");", null);
                 }
             );
-            wv.postDelayed(r[0], 1000);
+            if (polling) wv.postDelayed(r[0], 1000);
         };
         wv.postDelayed(r[0], 1200);
+    }
+
+    /** Corta el sondeo y libera el foco de audio que enforce() venía pidiendo
+     *  cada segundo; se llama al cerrar el video para no interferir más con
+     *  la reproducción nativa. */
+    private void stopPoll() {
+        polling = false;
     }
 
     private void js(final String code) {
