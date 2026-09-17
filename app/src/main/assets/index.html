@@ -1043,7 +1043,19 @@
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
 const HAS_BRIDGE = typeof Android !== 'undefined';
 
-function debug(msg) { console.log('[DEBUG]', msg); }
+let debugBar = null;
+function debug(msg) {
+  console.log('[DEBUG]', msg);
+  if (!debugBar) {
+    debugBar = document.createElement('div');
+    debugBar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
+      + 'background:#000;color:#0f0;font:11px monospace;padding:4px 8px;'
+      + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+      + 'border-bottom:1px solid #0f0;';
+    document.body.appendChild(debugBar);
+  }
+  debugBar.textContent = String(msg);
+}
 
 const audio = document.getElementById('audioEl');
 audio.volume = 1.0;
@@ -1964,7 +1976,8 @@ function startStream(url, title, src) {
     setRealTitle(displayName);
     if (src && src.author) setArtist(src.author);
     nativePos = 0;
-    try { Android.nativePlay(url, displayName, (src && src.author) || current.author || ''); } catch (e) { debug('nativePlay error'); }
+    debug('nativePlay → ' + (url ? url.slice(0, 60) : '(URL VACÍA)'));
+    try { Android.nativePlay(url, displayName); } catch (e) { debug('❌ nativePlay lanzó excepción: ' + e); }
     return;
   }
 

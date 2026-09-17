@@ -132,15 +132,10 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void nativePlay(final String url, final String title) {
-            nativePlay(url, title, "");
-        }
-        @JavascriptInterface
-        public void nativePlay(final String url, final String title, final String artist) {
             Intent i = new Intent(MainActivity.this, PlaybackService.class);
             i.putExtra(PlaybackService.EXTRA_CMD, "play_url");
             i.putExtra(PlaybackService.EXTRA_URL, url);
             i.putExtra(PlaybackService.EXTRA_TITLE, title != null ? title : "Mix.Casete");
-            i.putExtra(PlaybackService.EXTRA_ARTIST, artist != null ? artist : "");
             PlaybackService.start(MainActivity.this, i);
         }
         @JavascriptInterface
@@ -690,8 +685,10 @@ public class MainActivity extends Activity {
 
     private void tap() {
         long t = SystemClock.uptimeMillis();
-        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 1f, 1f, 0);
-        MotionEvent up   = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, 1f, 1f, 0);
+        float cx = Math.max(1, playerWv.getWidth() / 2f);
+        float cy = Math.max(1, playerWv.getHeight() / 2f);
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cx, cy, 0);
+        MotionEvent up   = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, cx, cy, 0);
         playerWv.dispatchTouchEvent(down);
         playerWv.dispatchTouchEvent(up);
         down.recycle();
