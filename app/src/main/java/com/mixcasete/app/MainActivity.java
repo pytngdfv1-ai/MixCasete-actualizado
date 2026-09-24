@@ -69,6 +69,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        try {
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } catch (Exception ignored) {}
         self = new WeakReference<>(this);
 
         FrameLayout root = new FrameLayout(this);
@@ -179,17 +182,38 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean isNative() {
+            return true;
+        }
+
+        @JavascriptInterface
+        public int getNativePositionMs() {
+            PlaybackService s = PlaybackService.getInstance();
+            if (s != null) return s.getPlayerPosition();
+            return -1;
+        }
+
+        @JavascriptInterface
+        public int getNativeDurationMs() {
+            PlaybackService s = PlaybackService.getInstance();
+            if (s != null) return s.getPlayerDuration();
+            return -1;
+        }
+
+        @JavascriptInterface
         public void showVideoOverlay(final String id) {
             runOnUiThread(() -> {
                 try {
                     android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-                    int size = (int) (Math.min(dm.widthPixels, dm.heightPixels) * 0.92f);
-                    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
+                    int width = (int) (Math.min(dm.widthPixels, dm.heightPixels) * 0.95f);
+                    int height = (int) (width * 9f / 16f);
+                    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(width, height);
                     lp.gravity = android.view.Gravity.CENTER;
                     playerWv.setLayoutParams(lp);
                     playerWv.setAlpha(1f);
-                    playerWv.loadUrl("https://www.youtube.com/watch?v=" + id
-                            + "&playsinline=1");
+                    // controls=0 garantiza que no se vean controles sobre el video
+                    playerWv.loadUrl("https://www.youtube.com/embed/" + id
+                            + "?autoplay=1&controls=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0");
 
                     if (videoCloseBtn == null) {
                         videoCloseBtn = new android.widget.TextView(MainActivity.this);
@@ -371,20 +395,22 @@ public class MainActivity extends Activity {
     private List<Uri> findAllPlaylistUris() {
         List<Uri> out = new ArrayList<>();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return out;
-        Cursor c = getContentResolver().query(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                new String[]{ MediaStore.Downloads._ID },
-                MediaStore.Downloads.DISPLAY_NAME + " LIKE ?",
-                new String[]{ "MixCasete_playlist%" },
-                MediaStore.Downloads._ID + " ASC");
-        if (c != null) {
-            while (c.moveToNext()) {
-                long id = c.getLong(0);
-                out.add(android.content.ContentUris.withAppendedId(
-                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, id));
+        try {
+            Cursor c = getContentResolver().query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    new String[]{ MediaStore.Downloads._ID },
+                    MediaStore.Downloads.DISPLAY_NAME + " LIKE ?",
+                    new String[]{ "MixCasete_playlist%" },
+                    MediaStore.Downloads._ID + " ASC");
+            if (c != null) {
+                while (c.moveToNext()) {
+                    long id = c.getLong(0);
+                    out.add(android.content.ContentUris.withAppendedId(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, id));
+                }
+                c.close();
             }
-            c.close();
-        }
+        } catch (Exception ignored) {}
         return out;
     }
 
@@ -394,47 +420,85 @@ public class MainActivity extends Activity {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
             List<Uri> all = findAllPlaylistUris();
             for (int i = 1; i < all.size(); i++) {
-                try { getContentResolver().delete(all.get(i), null, null); } catch (Exception e) {}
+                try { getContentResolver().delete(all.get(i), null, null); } catch (Exception ignored) {}
             }
-        } catch (Exception e) {}
+        } catch (Exception ignored) {}
     }
 
-    /* Escribe SIEMPRE sobre el mismo archivo (crea solo si no existe) */
+    /* Escribe SIEMPRE sobre el mismo archivo (sobrescribe un único MixCasete_playlist.json) */
     private boolean writePlaylistToDownloads(String json) {
         try {
+            // Guardar copia interna en almacenamiento privado seguro de la aplicación
+            try {
+                File internalFile = new File(getFilesDir(), "MixCasete_playlist.json");
+                FileOutputStream fos = new FileOutputStream(internalFile, false);
+                fos.write(json.getBytes("UTF-8"));
+                fos.flush();
+                fos.close();
+            } catch (Exception ignored) {}
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 android.content.ContentResolver cr = getContentResolver();
                 List<Uri> existing = findAllPlaylistUris();
                 Uri target = null;
-                if (!existing.isEmpty()) {
-                    target = existing.get(0);
-                    /* elimina duplicados si los hubiera */
-                    for (int i = 1; i < existing.size(); i++) {
-                        try { cr.delete(existing.get(i), null, null); } catch (Exception e) {}
-                    }
-                } else {
+                OutputStream os = null;
+
+                // Intentar reutilizar el primer archivo existente abriéndolo con "wt" (truncate/overwrite)
+                for (Uri u : existing) {
+                    try {
+                        os = cr.openOutputStream(u, "wt");
+                        if (os != null) {
+                            target = u;
+                            break;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Eliminar cualquier duplicado adicional para que quede un único archivo
+                for (Uri u : existing) {
+                    if (target != null && u.equals(target)) continue;
+                    try { cr.delete(u, null, null); } catch (Exception ignored) {}
+                }
+
+                // Si no existía o no se pudo abrir, eliminar cualquier entrada conflictiva por nombre antes de crear
+                if (os == null) {
+                    try {
+                        cr.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                                MediaStore.Downloads.DISPLAY_NAME + " LIKE ?",
+                                new String[]{ "MixCasete_playlist%" });
+                    } catch (Exception ignored) {}
+
                     ContentValues cv = new ContentValues();
                     cv.put(MediaStore.Downloads.DISPLAY_NAME, "MixCasete_playlist.json");
                     cv.put(MediaStore.Downloads.MIME_TYPE, "application/json");
                     cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                     cv.put(MediaStore.Downloads.IS_PENDING, 0);
                     target = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                    if (target != null) {
+                        os = cr.openOutputStream(target, "wt");
+                    }
                 }
-                if (target == null) return false;
-                /* "wt" = trunca y sobrescribe el mismo archivo */
-                OutputStream os = cr.openOutputStream(target, "wt");
-                os.write(json.getBytes("UTF-8"));
-                os.close();
-                return true;
+
+                if (os != null) {
+                    os.write(json.getBytes("UTF-8"));
+                    os.flush();
+                    os.close();
+                    return true;
+                }
+                return false;
             } else {
                 File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (!dir.exists()) dir.mkdirs();
                 File f = new File(dir, "MixCasete_playlist.json");
-                FileOutputStream os = new FileOutputStream(f);
+                FileOutputStream os = new FileOutputStream(f, false);
                 os.write(json.getBytes("UTF-8"));
+                os.flush();
                 os.close();
                 return true;
             }
-        } catch (Exception e) { return false; }
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /* Guarda un archivo binario (ej. PDF) en Descargas, decodificado desde base64. */

@@ -1,0 +1,8 @@
+{
+  "name": "MixCasete - Retro Cassette Player",
+  "description": "Reproductor retro de casete con búsqueda en YouTube, grabación en cinta virtual, listas de reproducción, carátulas HD y letras de canciones.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

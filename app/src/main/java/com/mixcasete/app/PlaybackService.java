@@ -48,6 +48,26 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     private String currentArtist = "";
     private boolean prepared = false;
 
+    private static volatile PlaybackService sInstance;
+
+    public static PlaybackService getInstance() {
+        return sInstance;
+    }
+
+    public int getPlayerPosition() {
+        try {
+            if (player != null && prepared) return player.getCurrentPosition();
+        } catch (Exception ignored) {}
+        return -1;
+    }
+
+    public int getPlayerDuration() {
+        try {
+            if (player != null && prepared) return player.getDuration();
+        } catch (Exception ignored) {}
+        return -1;
+    }
+
     public static void start(android.content.Context c, Intent i) {
         if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
         else c.startService(i);
@@ -62,6 +82,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     @Override
     public void onCreate() {
         super.onCreate();
+        sInstance = this;
         crearCanal();
         setupMediaSession();
         startForeground(1, buildNotif("Mix.Casete", false));
@@ -131,6 +152,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                 break;
             case "play":
                 if (player != null && prepared) {
+                    acquireWakeLock();
                     player.start();
                     requestAudioFocus();
                     updatePlaybackState(true);
@@ -168,6 +190,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
         try {
             player = new MediaPlayer();
+            player.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
             player.setAudioAttributes(new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -317,6 +340,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentIntent(pOpen)
                 .setOngoing(playing)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .addAction(playing
                         ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
                         playing ? "Pausa" : "Seguir", pP)
@@ -341,6 +365,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             NotificationChannel ch = new NotificationChannel(
                     CHANNEL, "Reproducción", NotificationManager.IMPORTANCE_LOW);
             ch.setDescription("Audio de Mix.Casete");
+            ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
                     .createNotificationChannel(ch);
         }
@@ -354,6 +379,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
     @Override
     public void onDestroy() {
+        if (sInstance == this) sInstance = null;
         stopPlayback();
         if (mediaSession != null) mediaSession.release();
         super.onDestroy();

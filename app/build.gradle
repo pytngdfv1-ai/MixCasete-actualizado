@@ -14,8 +14,22 @@ android {
         versionName "1.1"
     }
 
+    signingConfigs {
+        debugConfig {
+            storeFile file("${rootDir}/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
-        release { minifyEnabled false }
+        debug {
+            signingConfig signingConfigs.debugConfig
+        }
+        release {
+            minifyEnabled false
+        }
     }
 
     compileOptions {
@@ -23,14 +37,14 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    packagingOptions {
-        exclude 'META-INF/DEPENDENCIES'
+    packaging {
+        resources {
+            excludes += 'META-INF/DEPENDENCIES'
+        }
     }
 }
 
 dependencies {
-    // Revertido: BravePipeExtractor entregaba una URL "válida" (el título/portada
-    // cambiaban) pero sin audio real con el MediaPlayer nativo de Android.
-    // Se vuelve a la versión original que sí reproducía correctamente.
-    implementation 'com.github.TeamNewPipe:NewPipeExtractor:dev-SNAPSHOT'
+    implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.24.6'
 }
+
