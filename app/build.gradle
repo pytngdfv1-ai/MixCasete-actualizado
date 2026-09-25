@@ -14,18 +14,36 @@ android {
         versionName "1.1"
     }
 
+    // Asegurar keystore debug si existe base64 o usar fallback estándar
+    File customKeystore = file("${rootDir}/debug.keystore")
+    if (!customKeystore.exists()) {
+        File b64Keystore = file("${rootDir}/debug.keystore.base64")
+        if (b64Keystore.exists()) {
+            try {
+                byte[] decoded = java.util.Base64.getDecoder().decode(b64Keystore.text.replaceAll("\\s+", ""))
+                customKeystore.withOutputStream { it.write(decoded) }
+            } catch (Exception ignored) {}
+        }
+    }
+
     signingConfigs {
         debugConfig {
-            storeFile file("${rootDir}/debug.keystore")
-            storePassword "android"
-            keyAlias "androiddebugkey"
-            keyPassword "android"
+            if (customKeystore.exists()) {
+                storeFile customKeystore
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig signingConfigs.debugConfig
+            if (customKeystore.exists()) {
+                signingConfig signingConfigs.debugConfig
+            } else {
+                signingConfig signingConfigs.debug
+            }
         }
         release {
             minifyEnabled false
