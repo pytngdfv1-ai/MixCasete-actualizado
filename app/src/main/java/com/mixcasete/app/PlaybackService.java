@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -13,6 +14,7 @@ import android.media.MediaMetadata;
 import android.media.MediaPlayer;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -40,6 +42,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     public static final String EXTRA_SEEK = "seek";
 
     private PowerManager.WakeLock wl;
+    private WifiManager.WifiLock wifiLock;
+    private boolean isBridgeMode = false;
     private AudioManager audioManager;
     private AudioFocusRequest focusRequest;
     private MediaPlayer player;
@@ -85,7 +89,12 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         sInstance = this;
         crearCanal();
         setupMediaSession();
-        startForeground(1, buildNotif("Mix.Casete", false));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, buildNotif("Mix.Casete", false),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        } else {
+            startForeground(1, buildNotif("Mix.Casete", false));
+        }
     }
 
     private void setupMediaSession() {
@@ -96,6 +105,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             @Override public void onPlay() { doCmd("play"); }
             @Override public void onPause() { doCmd("pause"); }
             @Override public void onStop() { doCmd("stop"); }
+            @Override public void onSkipToNext() { notifyJs("btn_next"); }
+            @Override public void onSkipToPrevious() { notifyJs("btn_prev"); }
             @Override public void onSeekTo(long pos) {
                 if (player != null && prepared) player.seekTo((int) pos);
             }
@@ -143,6 +154,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
         switch (cmd) {
             case "play_url":
+                isBridgeMode = false;
                 String url = intent.getStringExtra(EXTRA_URL);
                 String title = intent.getStringExtra(EXTRA_TITLE);
                 String artist = intent.getStringExtra(EXTRA_ARTIST);
@@ -150,14 +162,31 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                 currentArtist = artist != null ? artist : "";
                 startPlayback(url);
                 break;
+            case "bridge_play":
+                isBridgeMode = true;
+                releasePlayer();
+                acquireLocks();
+                requestAudioFocus();
+                String bTitle = intent.getStringExtra(EXTRA_TITLE);
+                String bArtist = intent.getStringExtra(EXTRA_ARTIST);
+                if (bTitle != null && !bTitle.isEmpty()) currentTitle = bTitle;
+                currentArtist = bArtist != null ? bArtist : "";
+                updateMetadata();
+                updatePlaybackState(true);
+                updateNotif(true);
+                break;
             case "play":
+                acquireLocks();
+                requestAudioFocus();
                 if (player != null && prepared) {
-                    acquireWakeLock();
                     player.start();
-                    requestAudioFocus();
                     updatePlaybackState(true);
                     updateNotif(true);
                     notifyJs("playing");
+                } else if (isBridgeMode) {
+                    updatePlaybackState(true);
+                    updateNotif(true);
+                    notifyJs("btn_play");
                 }
                 break;
             case "pause":
@@ -166,6 +195,10 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                     updatePlaybackState(false);
                     updateNotif(false);
                     notifyJs("paused");
+                } else if (isBridgeMode) {
+                    updatePlaybackState(false);
+                    updateNotif(false);
+                    notifyJs("btn_pause");
                 }
                 break;
             case "stop":
@@ -183,9 +216,10 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     }
 
     private void startPlayback(String url) {
+        isBridgeMode = false;
         releasePlayer();
         requestAudioFocus();
-        acquireWakeLock();
+        acquireLocks();
         updateMetadata();
 
         try {
@@ -229,8 +263,9 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     }
 
     private void stopPlayback() {
+        isBridgeMode = false;
         releasePlayer();
-        releaseWakeLock();
+        releaseLocks();
         releaseAudioFocus();
         if (mediaSession != null) mediaSession.setActive(false);
     }
@@ -281,16 +316,50 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         }
     }
 
+    private void acquireLocks() {
+        acquireWakeLock();
+        acquireWifiLock();
+    }
+
+    private void releaseLocks() {
+        releaseWakeLock();
+        releaseWifiLock();
+    }
+
     private void acquireWakeLock() {
         if (wl == null) {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-            wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mixcasete:play");
+            if (pm != null) {
+                wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mixcasete:play");
+            }
         }
-        if (!wl.isHeld()) wl.acquire(4 * 60 * 60 * 1000L);
+        if (wl != null && !wl.isHeld()) wl.acquire(4 * 60 * 60 * 1000L);
     }
 
     private void releaseWakeLock() {
-        if (wl != null && wl.isHeld()) wl.release();
+        if (wl != null && wl.isHeld()) {
+            try { wl.release(); } catch (Exception ignored) {}
+        }
+    }
+
+    private void acquireWifiLock() {
+        if (wifiLock == null) {
+            try {
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                if (wm != null) {
+                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mixcasete:wifi");
+                }
+            } catch (Exception ignored) {}
+        }
+        if (wifiLock != null && !wifiLock.isHeld()) {
+            try { wifiLock.acquire(); } catch (Exception ignored) {}
+        }
+    }
+
+    private void releaseWifiLock() {
+        if (wifiLock != null && wifiLock.isHeld()) {
+            try { wifiLock.release(); } catch (Exception ignored) {}
+        }
     }
 
     /** Metadata (título/artista) que ve el sistema: pantalla de bloqueo,
@@ -356,8 +425,19 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     }
 
     private void updateNotif(boolean playing) {
-        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        try { nm.notify(1, buildNotif(currentTitle, playing)); } catch (Exception e) {}
+        try {
+            Notification notif = buildNotif(currentTitle, playing);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(1, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(1, notif);
+            }
+        } catch (Exception e) {
+            try {
+                NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                if (nm != null) nm.notify(1, buildNotif(currentTitle, playing));
+            } catch (Exception ignored) {}
+        }
     }
 
     private void crearCanal() {

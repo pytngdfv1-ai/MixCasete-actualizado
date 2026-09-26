@@ -1283,41 +1283,48 @@
     }
   }
 
-  body.tv-split-active:not(.classic-mode):not(.mobile-device) {
+  body.tv-split-active:not(.classic-mode) {
     overflow: hidden !important;
   }
-  @media (min-width: 1024px) and (pointer: fine) {
-    body.tv-split-active:not(.classic-mode):not(.mobile-device) .app-split-container {
-      width: 100vw; height: 100vh; max-height: 100vh;
-      display: flex; flex-direction: row;
-      align-items: stretch; justify-content: stretch;
-      padding: 10px 14px; gap: 14px; box-sizing: border-box;
-      overflow: hidden;
+  @media (min-width: 640px) and (orientation: landscape), (min-width: 960px) {
+    body.tv-split-active:not(.classic-mode) .app-split-container {
+      width: 100vw !important; height: 100vh !important; max-height: 100vh !important;
+      max-width: 100vw !important;
+      display: flex !important; flex-direction: row !important;
+      align-items: stretch !important; justify-content: stretch !important;
+      padding: 8px 12px !important; gap: 12px !important; box-sizing: border-box !important;
+      overflow: hidden !important;
     }
-    body.tv-split-active:not(.classic-mode):not(.mobile-device) .split-col-player {
-      flex: 0 0 48%; max-width: 50%; height: 100%;
-      overflow-y: auto; overflow-x: hidden;
-      display: flex; align-items: center; justify-content: center;
-      padding: 4px;
+    body.tv-split-active:not(.classic-mode) .split-col-player {
+      flex: 0 0 46% !important; max-width: 48% !important; height: 100% !important;
+      overflow-y: auto !important; overflow-x: hidden !important;
+      display: flex !important; align-items: center !important; justify-content: center !important;
+      padding: 4px !important;
     }
-    body.tv-split-active:not(.classic-mode):not(.mobile-device) .split-col-player .device {
-      width: 100%; max-width: 410px; max-height: 100%;
-      margin: auto;
+    body.tv-split-active:not(.classic-mode) .split-col-player .device {
+      width: 100% !important; max-width: 390px !important; max-height: 100% !important;
+      margin: auto !important;
     }
-    body.tv-split-active:not(.classic-mode):not(.mobile-device) .split-col-player .album-area {
+    body.tv-split-active:not(.classic-mode) .split-col-player .album-area {
       display: none !important;
     }
-    body.tv-split-active:not(.classic-mode):not(.mobile-device) .split-col-player .cassette-window {
-      margin-top: 48px !important;
+    body.tv-split-active:not(.classic-mode) .split-col-player .cassette-window {
+      margin-top: 40px !important;
     }
-    body.tv-split-active:not(.classic-mode):not(.mobile-device) .split-col-tv {
-      flex: 1 1 52%; max-width: 52%; height: 100%;
-      display: flex !important; flex-direction: column;
-      border-radius: 26px;
-      background: radial-gradient(circle at 65% 25%, #25201a 0%, #151210 60%, #0a0807 100%);
-      border: 2px solid #3d352b;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.08);
-      position: relative; overflow: hidden; z-index: 5;
+    body.tv-split-active:not(.classic-mode) .split-col-tv {
+      flex: 1 1 54% !important; max-width: 54% !important; height: 100% !important;
+      display: flex !important; flex-direction: column !important;
+      border-radius: 22px !important;
+      background: radial-gradient(circle at 65% 25%, #25201a 0%, #151210 60%, #0a0807 100%) !important;
+      border: 2px solid #3d352b !important;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.08) !important;
+      position: relative !important; overflow: hidden !important; z-index: 5 !important;
+    }
+    body.tv-split-active:not(.classic-mode) .split-col-tv .tv-cover-section {
+      display: flex !important;
+    }
+    body.tv-split-active:not(.classic-mode) .split-col-tv .tv-lyrics-section {
+      display: flex !important;
     }
   }
 
@@ -1615,37 +1622,76 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* MODAL COMPARTIR TV / CAST */
+  /* MODAL COMPARTIR TV / CAST - DESLIZABLE Y RESPONSIVO */
   .tv-share-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
-    backdrop-filter: blur(8px);
+    position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+    backdrop-filter: blur(10px);
     display: none; align-items: center; justify-content: center;
-    z-index: 10000; padding: 16px;
+    z-index: 10000;
+    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .tv-share-overlay.open { display: flex; }
   .tv-share-modal {
-    width: 100%; max-width: 480px;
+    width: 100%; max-width: 500px;
+    max-height: calc(100dvh - 24px);
+    max-height: calc(100vh - 24px);
+    margin: auto;
     background: radial-gradient(circle at 50% 20%, #26201a 0%, #151210 80%);
     border: 2px solid #5a4b38; border-radius: 20px;
-    padding: 20px; box-shadow: 0 25px 60px rgba(0,0,0,0.9);
-    display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.9);
+    display: flex; flex-direction: column;
     color: #f0e6d2; font-family: 'Montserrat', sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+  .tv-modal-drag-bar {
+    width: 38px; height: 4px; border-radius: 2px;
+    background: rgba(255,176,32,0.4);
+    margin: 8px auto 0 auto;
+    display: none;
   }
   .tv-modal-header {
     display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    padding: 14px 18px;
+    background: rgba(26, 21, 16, 0.96);
+    flex-shrink: 0; gap: 10px;
   }
   .tv-modal-title {
-    font-family: 'Oswald', sans-serif; font-size: 17px; font-weight: 700;
-    color: #ffb020; letter-spacing: 0.5px;
+    font-family: 'Oswald', sans-serif; font-size: 16px; font-weight: 700;
+    color: #ffb020; letter-spacing: 0.5px; line-height: 1.2;
+    display: flex; align-items: center; gap: 8px;
   }
   .tv-modal-close {
     background: rgba(255,255,255,0.1); border: none; color: #fff;
-    width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
-    font-size: 14px; line-height: 1;
+    width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+    font-size: 16px; line-height: 1; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease;
   }
+  .tv-modal-close:hover { background: rgba(255,176,32,0.3); color: #ffb020; }
   .tv-share-options {
     display: flex; flex-direction: column; gap: 10px;
+    padding: 14px 16px 22px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    flex: 1 1 auto;
+    scrollbar-width: thin;
+    scrollbar-color: #ffb020 rgba(0,0,0,0.35);
+  }
+  .tv-share-options::-webkit-scrollbar {
+    width: 6px;
+  }
+  .tv-share-options::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+  }
+  .tv-share-options::-webkit-scrollbar-thumb {
+    background: #ffb020;
+    border-radius: 8px;
   }
   .tv-option-card {
     display: flex; align-items: center; gap: 12px;
@@ -1653,18 +1699,47 @@
     border-radius: 12px; padding: 12px 14px; cursor: pointer;
     transition: all 0.15s ease;
   }
-  .tv-option-card:hover {
+  .tv-option-card:hover, .tv-option-card:active {
     background: rgba(255,176,32,0.12); border-color: #ffb020;
     transform: translateY(-1px);
   }
   .tv-opt-icon { font-size: 26px; flex: none; }
-  .tv-opt-info { flex: 1; }
+  .tv-opt-info { flex: 1; min-width: 0; }
   .tv-opt-title { font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 2px; }
   .tv-opt-desc { font-size: 11px; color: #b0a390; line-height: 1.3; }
   .tv-opt-btn {
     background: #ffb020; color: #171412; border: none;
     font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 10px;
-    padding: 6px 12px; border-radius: 6px; cursor: pointer; flex: none;
+    padding: 7px 12px; border-radius: 6px; cursor: pointer; flex: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  }
+  @media (max-width: 480px) {
+    .tv-share-modal {
+      border-radius: 16px;
+      max-height: calc(100dvh - 16px);
+      max-height: calc(100vh - 16px);
+    }
+    .tv-modal-drag-bar { display: block; }
+    .tv-modal-header { padding: 10px 14px; }
+    .tv-modal-title { font-size: 14px; }
+    .tv-share-options { padding: 10px 12px 18px; gap: 8px; }
+    .tv-option-card { padding: 10px 10px; gap: 10px; }
+    .tv-opt-icon { font-size: 22px; }
+    .tv-opt-title { font-size: 12px; }
+    .tv-opt-desc { font-size: 10px; }
+    .tv-opt-btn { font-size: 9px; padding: 6px 9px; }
+  }
+  @media (max-height: 520px) {
+    .tv-share-modal {
+      max-height: calc(100dvh - 12px);
+      max-height: calc(100vh - 12px);
+      border-radius: 14px;
+    }
+    .tv-modal-header { padding: 8px 12px; }
+    .tv-modal-title { font-size: 13px; }
+    .tv-share-options { padding: 8px 10px 14px; gap: 6px; }
+    .tv-option-card { padding: 8px 10px; }
+    .tv-opt-desc { display: none; }
   }
 
 </style>
@@ -2005,9 +2080,10 @@
 
 <div class="tv-share-overlay" id="tvShareOverlay">
   <div class="tv-share-modal">
+    <div class="tv-modal-drag-bar"></div>
     <div class="tv-modal-header">
-      <div class="tv-modal-title">📺 COMPARTIR / CONECTAR A OTRO DISPOSITIVO (TV)</div>
-      <button class="tv-modal-close" id="tvShareClose">✕</button>
+      <div class="tv-modal-title">📺 CONECTAR Y COMPARTIR EN TV</div>
+      <button class="tv-modal-close" id="tvShareClose" title="Cerrar">✕</button>
     </div>
     <div class="tv-share-options">
       <div class="tv-option-card" id="optTvScreenShare">
@@ -2126,6 +2202,9 @@ function stopSilentKeepAlive() {
 let screenWakeLock = null;
 async function requestScreenWakeLock() {
   try {
+    if (window.Android && window.Android.setKeepScreenOn) {
+      window.Android.setKeepScreenOn(true);
+    }
     if ('wakeLock' in navigator && !screenWakeLock) {
       screenWakeLock = await navigator.wakeLock.request('screen');
       screenWakeLock.addEventListener('release', () => { screenWakeLock = null; });
@@ -2133,10 +2212,15 @@ async function requestScreenWakeLock() {
   } catch (e) {}
 }
 function releaseScreenWakeLock() {
-  if (screenWakeLock) {
-    screenWakeLock.release().catch(() => {});
-    screenWakeLock = null;
-  }
+  try {
+    if (window.Android && window.Android.setKeepScreenOn) {
+      window.Android.setKeepScreenOn(false);
+    }
+    if (screenWakeLock) {
+      screenWakeLock.release().catch(() => {});
+      screenWakeLock = null;
+    }
+  } catch (e) {}
 }
 
 // 3. MediaSession API (Controles en pantalla de bloqueo, barra de notificaciones y Bluetooth)
@@ -2704,19 +2788,19 @@ function setClassicMode(enable) {
     if (document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
+    if (window.Android && window.Android.setOrientation) {
+      window.Android.setOrientation('portrait');
+    }
     flashTitle('📼 Modo Reproductor Clásico');
   } else {
-    // Si es móvil, la app funciona en formato vertical exclusivo
-    if (isMobileDevice) {
-      flashTitle('📱 En móvil MixCasete funciona en posición vertical');
-      return;
-    }
     document.body.classList.remove('classic-mode');
     document.body.classList.add('tv-split-active');
     if (tvModeBtn) tvModeBtn.classList.add('active');
     localStorage.setItem('mixcasete_view_mode', 'tv');
     requestScreenWakeLock();
-    if (screen.orientation && screen.orientation.lock) {
+    if (window.Android && window.Android.setOrientation) {
+      window.Android.setOrientation('landscape');
+    } else if (screen.orientation && screen.orientation.lock) {
       screen.orientation.lock('landscape').catch(() => {});
     }
     flashTitle('📺 Modo TV / Pantalla Dividida');
@@ -2849,13 +2933,20 @@ const tvQrBox = document.getElementById('tvQrBox');
 const tvQrImg = document.getElementById('tvQrImg');
 const tvQrUrlText = document.getElementById('tvQrUrlText');
 
+function getTvShareUrl() {
+  if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+    return window.location.href;
+  }
+  return 'https://ais-pre-nfch5wgnkbbwbz2rjkgvxs-57470664433.us-west2.run.app';
+}
+
 function toggleTvQrBox() {
   if (!tvQrBox) return;
   const isHidden = tvQrBox.style.display === 'none' || !tvQrBox.style.display;
   if (isHidden) {
-    const currentUrl = window.location.href;
+    const currentUrl = getTvShareUrl();
     if (tvQrImg) {
-      tvQrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(currentUrl);
+      tvQrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentUrl);
     }
     if (tvQrUrlText) {
       tvQrUrlText.textContent = currentUrl;
@@ -2873,10 +2964,11 @@ const optTvShareLink = document.getElementById('optTvShareLink');
 if (optTvShareLink) {
   optTvShareLink.addEventListener('click', async () => {
     tvShareOverlay.classList.remove('open');
+    const shareUrl = getTvShareUrl();
     const shareData = {
       title: 'MixCasete - ' + (current ? current.title : 'Retro Player'),
       text: '🎶 Escucha en MixCasete con letras karaoke y portada HD: ' + (current ? current.title : ''),
-      url: window.location.href
+      url: shareUrl
     };
     if (navigator.share) {
       try {
@@ -2885,7 +2977,7 @@ if (optTvShareLink) {
       } catch (e) {}
     } else {
       if (navigator.clipboard) {
-        navigator.clipboard.writeText(window.location.href);
+        navigator.clipboard.writeText(shareUrl);
         flashTitle('📋 Enlace copiado para tu Smart TV');
       }
     }
@@ -3265,6 +3357,10 @@ window.onNativePlayerEvent = function (event) {
   else if (event === 'paused') { setReels(false); stopNativeClock(); }
   else if (event === 'ended') { setReels(false); stopNativeClock(); autoNext(); }
   else if (event === 'error') { debug('⚠ Error de audio nativo'); setReels(false); stopNativeClock(); }
+  else if (event === 'btn_play') { doPlay(); }
+  else if (event === 'btn_pause') { doPause(); }
+  else if (event === 'btn_next') { doNextTrack(); }
+  else if (event === 'btn_prev') { doPrevTrack(); }
 };
 
 /* ============ 📼 WEBVIEW RESPALDO ============ */
@@ -3275,7 +3371,13 @@ function fbLoad(id) {
   updateMediaSessionMetadata(current, true);
   syncTvPanelUI(current, true);
   if (HAS_BRIDGE) {
-    try { Android.playYT(id); } catch (e) {}
+    try {
+      if (Android.playYTWithMeta) {
+        Android.playYTWithMeta(id, (current && current.title) || '', (current && current.author) || '');
+      } else {
+        Android.playYT(id);
+      }
+    } catch (e) {}
     setReels(true);
   }
 }

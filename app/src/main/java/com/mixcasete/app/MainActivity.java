@@ -254,16 +254,77 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void setOrientation(final String mode) {
+            runOnUiThread(() -> {
+                try {
+                    if ("landscape".equalsIgnoreCase(mode)) {
+                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                    } else if ("portrait".equalsIgnoreCase(mode)) {
+                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                    } else {
+                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+                    }
+                } catch (Exception ignored) {}
+            });
+        }
+
+        @JavascriptInterface
+        public void setKeepScreenOn(final boolean keepOn) {
+            runOnUiThread(() -> {
+                try {
+                    if (keepOn) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                } catch (Exception ignored) {}
+            });
+        }
+
+        @JavascriptInterface
         public void playYT(final String id) {
+            playYTWithMeta(id, null, null);
+        }
+
+        @JavascriptInterface
+        public void playYTWithMeta(final String id, final String title, final String author) {
             lastId = id;
             noVideoCount = 0;
             triedAlt = false;
+
+            // Mantener el servicio en primer plano para que Android no pause ni corte el audio
+            try {
+                Intent i = new Intent(MainActivity.this, PlaybackService.class);
+                i.putExtra(PlaybackService.EXTRA_CMD, "bridge_play");
+                i.putExtra(PlaybackService.EXTRA_TITLE, title != null && !title.isEmpty() ? title : "Mix.Casete");
+                i.putExtra(PlaybackService.EXTRA_ARTIST, author != null ? author : "");
+                PlaybackService.start(MainActivity.this, i);
+            } catch (Exception ignored) {}
+
             runOnUiThread(() -> playerWv.loadUrl(
                     "https://www.youtube.com/watch?v=" + id + "&playsinline=1"));
         }
-        @JavascriptInterface public void resumeYT() { runOnUiThread(() -> { tap(); enforce(); }); }
-        @JavascriptInterface public void pauseYT() { js("(function(){var v=document.querySelector('video');if(v)v.pause();})();"); }
-        @JavascriptInterface public void stopYT()  { runOnUiThread(() -> { polling = false; playerWv.loadUrl("about:blank"); }); }
+        @JavascriptInterface public void resumeYT() {
+            try {
+                Intent i = new Intent(MainActivity.this, PlaybackService.class);
+                i.putExtra(PlaybackService.EXTRA_CMD, "play");
+                PlaybackService.start(MainActivity.this, i);
+            } catch (Exception ignored) {}
+            runOnUiThread(() -> { tap(); enforce(); });
+        }
+        @JavascriptInterface public void pauseYT() {
+            try {
+                Intent i = new Intent(MainActivity.this, PlaybackService.class);
+                i.putExtra(PlaybackService.EXTRA_CMD, "pause");
+                PlaybackService.start(MainActivity.this, i);
+            } catch (Exception ignored) {}
+            js("(function(){var v=document.querySelector('video');if(v)v.pause();})();");
+        }
+        @JavascriptInterface public void stopYT()  {
+            try {
+                Intent i = new Intent(MainActivity.this, PlaybackService.class);
+                i.putExtra(PlaybackService.EXTRA_CMD, "stop");
+                PlaybackService.start(MainActivity.this, i);
+            } catch (Exception ignored) {}
+            runOnUiThread(() -> { polling = false; playerWv.loadUrl("about:blank"); });
+        }
         @JavascriptInterface public void seekYT(final int sec) { js("(function(){var v=document.querySelector('video');if(v)v.currentTime=" + sec + ";})();"); }
         @JavascriptInterface public void unmuteYT() { runOnUiThread(() -> { tap(); enforce(); tap(); enforce(); }); }
 
@@ -735,23 +796,46 @@ public class MainActivity extends Activity {
     private class PlayerClient extends WebViewClient {
         @Override
         public void onPageFinished(WebView view, String url) {
+            injectBackgroundPlaybackScript(view);
             if (url.contains("youtube.com/watch") || url.contains("youtu.be/")) {
                 injectWatchCss();
                 tap();
                 enforce();
-                view.postDelayed(() -> { injectWatchCss(); tap(); enforce(); }, 700);
-                view.postDelayed(() -> enforce(), 1800);
-                view.postDelayed(() -> enforce(), 3500);
+                view.postDelayed(() -> { injectBackgroundPlaybackScript(view); injectWatchCss(); tap(); enforce(); }, 700);
+                view.postDelayed(() -> { injectBackgroundPlaybackScript(view); enforce(); }, 1800);
+                view.postDelayed(() -> { injectBackgroundPlaybackScript(view); enforce(); }, 3500);
                 startPoll();
             } else if (url.contains("/embed/") || url.contains("youtube-nocookie")) {
                 tap();
                 enforce();
-                view.postDelayed(() -> { tap(); enforce(); }, 700);
-                view.postDelayed(() -> enforce(), 1800);
-                view.postDelayed(() -> enforce(), 3500);
+                view.postDelayed(() -> { injectBackgroundPlaybackScript(view); tap(); enforce(); }, 700);
+                view.postDelayed(() -> { injectBackgroundPlaybackScript(view); enforce(); }, 1800);
+                view.postDelayed(() -> { injectBackgroundPlaybackScript(view); enforce(); }, 3500);
                 startPoll();
             }
         }
+    }
+
+    private void injectBackgroundPlaybackScript(WebView view) {
+        if (view == null) return;
+        view.evaluateJavascript(
+            "(function(){\n" +
+            "  try {\n" +
+            "    Object.defineProperty(document, 'hidden', { get: function() { return false; }, configurable: true });\n" +
+            "    Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; }, configurable: true });\n" +
+            "    Object.defineProperty(document, 'webkitHidden', { get: function() { return false; }, configurable: true });\n" +
+            "    Object.defineProperty(document, 'webkitVisibilityState', { get: function() { return 'visible'; }, configurable: true });\n" +
+            "  } catch(e) {}\n" +
+            "  ['visibilitychange', 'webkitvisibilitychange', 'blur', 'pagehide'].forEach(function(ev) {\n" +
+            "    window.addEventListener(ev, function(e) { e.stopImmediatePropagation(); }, true);\n" +
+            "    document.addEventListener(ev, function(e) { e.stopImmediatePropagation(); }, true);\n" +
+            "  });\n" +
+            "  var v = document.querySelector('video');\n" +
+            "  if (v) {\n" +
+            "    v.removeAttribute('muted'); v.defaultMuted = false; v.muted = false; v.volume = 1;\n" +
+            "    if (v.paused) v.play();\n" +
+            "  }\n" +
+            "})();", null);
     }
 
     private void injectWatchCss() {
@@ -834,5 +918,18 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (wv.canGoBack()) wv.goBack();
         else super.onBackPressed();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Mantener WebViews activas para que el audio siga en segundo plano
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (wv != null) wv.resumeTimers();
+        if (playerWv != null) playerWv.resumeTimers();
     }
 }
