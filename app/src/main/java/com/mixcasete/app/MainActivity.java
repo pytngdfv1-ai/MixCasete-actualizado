@@ -41,8 +41,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import android.app.NotificationManager;
+import android.media.AudioAttributes;
+import android.media.MediaPlayer;
 
 public class MainActivity extends Activity {
 
@@ -52,6 +56,9 @@ public class MainActivity extends Activity {
     private WebView playerWv;
     private FrameLayout rootLayout;
     private android.widget.TextView videoCloseBtn;
+
+    private MediaPlayer nativePlayer = null;
+    private boolean nativePrepared = false;
 
     private boolean polling = false;
     private boolean isForeground = false;
@@ -75,6 +82,13 @@ public class MainActivity extends Activity {
             setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         } catch (Exception ignored) {}
         self = new WeakReference<>(this);
+
+        // Cancelar y limpiar cualquier servicio de notificación previo para que no quede reproductor flotante
+        try {
+            PlaybackService.stop(this);
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancelAll();
+        } catch (Exception ignored) {}
 
         FrameLayout root = new FrameLayout(this);
         rootLayout = root;
@@ -137,6 +151,84 @@ public class MainActivity extends Activity {
                 "window.onNativePlayerEvent && window.onNativePlayerEvent('" + event + "')", null));
     }
 
+    private synchronized void startNativePlayback(String url) {
+        releaseNativePlayer();
+        try {
+            nativePlayer = new MediaPlayer();
+            nativePlayer.setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build());
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                Map<String, String> headers = new HashMap<>();
+                headers.put("User-Agent", UA);
+                headers.put("Referer", "https://www.youtube.com/");
+                nativePlayer.setDataSource(this, Uri.parse(url), headers);
+            } else if (url.startsWith("file://")) {
+                nativePlayer.setDataSource(this, Uri.parse(url));
+            } else {
+                nativePlayer.setDataSource(url);
+            }
+            nativePlayer.setOnPreparedListener(mp -> {
+                nativePrepared = true;
+                mp.start();
+                onPlayerEvent("playing");
+            });
+            nativePlayer.setOnCompletionListener(mp -> {
+                onPlayerEvent("ended");
+            });
+            nativePlayer.setOnErrorListener((mp, what, extra) -> {
+                onPlayerEvent("error");
+                return true;
+            });
+            nativePlayer.prepareAsync();
+        } catch (Exception e) {
+            onPlayerEvent("error");
+        }
+    }
+
+    private synchronized void pauseNativePlayer() {
+        if (nativePlayer != null && nativePrepared) {
+            try {
+                if (nativePlayer.isPlaying()) nativePlayer.pause();
+                onPlayerEvent("paused");
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private synchronized void resumeNativePlayer() {
+        if (nativePlayer != null && nativePrepared) {
+            try {
+                nativePlayer.start();
+                onPlayerEvent("playing");
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private synchronized void stopNativePlayer() {
+        releaseNativePlayer();
+        onPlayerEvent("paused");
+    }
+
+    private synchronized void seekNativePlayer(int sec) {
+        if (nativePlayer != null && nativePrepared) {
+            try {
+                nativePlayer.seekTo(sec * 1000);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private synchronized void releaseNativePlayer() {
+        if (nativePlayer != null) {
+            try {
+                if (nativePlayer.isPlaying()) nativePlayer.stop();
+                nativePlayer.release();
+            } catch (Exception ignored) {}
+            nativePlayer = null;
+            nativePrepared = false;
+        }
+    }
+
     /* ================= PUENTE JS ↔ JAVA ================= */
     public class Bridge {
 
@@ -151,36 +243,27 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void nativePlay(final String url, final String title) {
-            Intent i = new Intent(MainActivity.this, PlaybackService.class);
-            i.putExtra(PlaybackService.EXTRA_CMD, "play_url");
-            i.putExtra(PlaybackService.EXTRA_URL, url);
-            i.putExtra(PlaybackService.EXTRA_TITLE, title != null ? title : "Mix.Casete");
-            PlaybackService.start(MainActivity.this, i);
+            runOnUiThread(() -> startNativePlayback(url));
         }
+
         @JavascriptInterface
         public void nativePause() {
-            Intent i = new Intent(MainActivity.this, PlaybackService.class);
-            i.putExtra(PlaybackService.EXTRA_CMD, "pause");
-            PlaybackService.start(MainActivity.this, i);
+            runOnUiThread(() -> pauseNativePlayer());
         }
+
         @JavascriptInterface
         public void nativeResume() {
-            Intent i = new Intent(MainActivity.this, PlaybackService.class);
-            i.putExtra(PlaybackService.EXTRA_CMD, "play");
-            PlaybackService.start(MainActivity.this, i);
+            runOnUiThread(() -> resumeNativePlayer());
         }
+
         @JavascriptInterface
         public void nativeStop() {
-            Intent i = new Intent(MainActivity.this, PlaybackService.class);
-            i.putExtra(PlaybackService.EXTRA_CMD, "stop");
-            PlaybackService.start(MainActivity.this, i);
+            runOnUiThread(() -> stopNativePlayer());
         }
+
         @JavascriptInterface
         public void nativeSeek(int sec) {
-            Intent i = new Intent(MainActivity.this, PlaybackService.class);
-            i.putExtra(PlaybackService.EXTRA_CMD, "seek");
-            i.putExtra(PlaybackService.EXTRA_SEEK, sec);
-            PlaybackService.start(MainActivity.this, i);
+            runOnUiThread(() -> seekNativePlayer(sec));
         }
 
         @JavascriptInterface
@@ -190,16 +273,23 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public int getNativePositionMs() {
-            PlaybackService s = PlaybackService.getInstance();
-            if (s != null) return s.getPlayerPosition();
+            try {
+                if (nativePlayer != null && nativePrepared) return nativePlayer.getCurrentPosition();
+            } catch (Exception ignored) {}
             return -1;
         }
 
         @JavascriptInterface
         public int getNativeDurationMs() {
-            PlaybackService s = PlaybackService.getInstance();
-            if (s != null) return s.getPlayerDuration();
+            try {
+                if (nativePlayer != null && nativePrepared) return nativePlayer.getDuration();
+            } catch (Exception ignored) {}
             return -1;
+        }
+
+        @JavascriptInterface
+        public void exitApp() {
+            runOnUiThread(() -> cleanupAndExit());
         }
 
         @JavascriptInterface
@@ -213,23 +303,18 @@ public class MainActivity extends Activity {
                     lp.gravity = android.view.Gravity.CENTER;
                     playerWv.setLayoutParams(lp);
                     playerWv.setAlpha(1f);
-                    // controls=0 garantiza que no se vean controles sobre el video
                     playerWv.loadUrl("https://www.youtube.com/embed/" + id
                             + "?autoplay=1&controls=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0");
 
                     if (videoCloseBtn == null) {
                         videoCloseBtn = new android.widget.TextView(MainActivity.this);
-                        videoCloseBtn.setText("✕");
-                        videoCloseBtn.setTextSize(20);
+                        videoCloseBtn.setText("✕ CERRAR");
+                        videoCloseBtn.setTextSize(16);
                         videoCloseBtn.setTextColor(0xFFFFFFFF);
-                        videoCloseBtn.setBackgroundColor(0x99000000);
-                        int pad = (int) (10 * getResources().getDisplayMetrics().density);
+                        videoCloseBtn.setBackgroundColor(0xDD000000);
+                        int pad = (int) (12 * getResources().getDisplayMetrics().density);
                         videoCloseBtn.setPadding(pad, pad / 2, pad, pad / 2);
-                        videoCloseBtn.setOnClickListener(v -> {
-                            hideVideoOverlay();
-                            wv.evaluateJavascript(
-                                "window.onVideoOverlayClosed && window.onVideoOverlayClosed()", null);
-                        });
+                        videoCloseBtn.setOnClickListener(v -> hideVideoOverlay());
                         FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(
                                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
                         clp.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
@@ -251,6 +336,8 @@ public class MainActivity extends Activity {
                     playerWv.setAlpha(0f);
                     playerWv.setLayoutParams(new FrameLayout.LayoutParams(1, 1));
                     if (videoCloseBtn != null) videoCloseBtn.setVisibility(android.view.View.GONE);
+                    wv.evaluateJavascript(
+                        "window.onVideoOverlayClosed && window.onVideoOverlayClosed()", null);
                 } catch (Exception e) {}
             });
         }
@@ -291,40 +378,16 @@ public class MainActivity extends Activity {
             noVideoCount = 0;
             triedAlt = false;
 
-            // Mantener el servicio en primer plano para que Android no pause ni corte el audio
-            try {
-                Intent i = new Intent(MainActivity.this, PlaybackService.class);
-                i.putExtra(PlaybackService.EXTRA_CMD, "bridge_play");
-                i.putExtra(PlaybackService.EXTRA_TITLE, title != null && !title.isEmpty() ? title : "Mix.Casete");
-                i.putExtra(PlaybackService.EXTRA_ARTIST, author != null ? author : "");
-                PlaybackService.start(MainActivity.this, i);
-            } catch (Exception ignored) {}
-
             runOnUiThread(() -> playerWv.loadUrl(
                     "https://www.youtube.com/watch?v=" + id + "&playsinline=1"));
         }
         @JavascriptInterface public void resumeYT() {
-            try {
-                Intent i = new Intent(MainActivity.this, PlaybackService.class);
-                i.putExtra(PlaybackService.EXTRA_CMD, "play");
-                PlaybackService.start(MainActivity.this, i);
-            } catch (Exception ignored) {}
             runOnUiThread(() -> { tap(); enforce(); });
         }
         @JavascriptInterface public void pauseYT() {
-            try {
-                Intent i = new Intent(MainActivity.this, PlaybackService.class);
-                i.putExtra(PlaybackService.EXTRA_CMD, "pause");
-                PlaybackService.start(MainActivity.this, i);
-            } catch (Exception ignored) {}
             js("(function(){var v=document.querySelector('video');if(v)v.pause();})();");
         }
         @JavascriptInterface public void stopYT()  {
-            try {
-                Intent i = new Intent(MainActivity.this, PlaybackService.class);
-                i.putExtra(PlaybackService.EXTRA_CMD, "stop");
-                PlaybackService.start(MainActivity.this, i);
-            } catch (Exception ignored) {}
             runOnUiThread(() -> { polling = false; playerWv.loadUrl("about:blank"); });
         }
         @JavascriptInterface public void seekYT(final int sec) { js("(function(){var v=document.querySelector('video');if(v)v.currentTime=" + sec + ";})();"); }
@@ -1030,8 +1093,29 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (wv.canGoBack()) wv.goBack();
-        else super.onBackPressed();
+        // 1. Si el overlay de video está abierto, cerrarlo primero
+        if (playerWv != null && playerWv.getAlpha() > 0.1f) {
+            hideVideoOverlay();
+            return;
+        }
+        // 2. Si hay historial dentro de la WebView principal, volver atrás
+        if (wv != null && wv.canGoBack()) {
+            wv.goBack();
+            return;
+        }
+        // 3. Salir completamente de la aplicación sin dejar nada en segundo plano
+        cleanupAndExit();
+    }
+
+    private void cleanupAndExit() {
+        releaseNativePlayer();
+        stopPoll();
+        try {
+            PlaybackService.stop(this);
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancelAll();
+        } catch (Exception ignored) {}
+        finishAffinity();
     }
 
     @Override
@@ -1039,9 +1123,12 @@ public class MainActivity extends Activity {
         super.onPause();
         isForeground = false;
         try {
-            // Liberar flag para que la pantalla de bloqueo de Android funcione normalmente
             getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } catch (Exception ignored) {}
+
+        // Sin reproducción en segundo plano: pausar inmediatamente
+        pauseNativePlayer();
+        js("(function(){var v=document.querySelector('video');if(v)v.pause();})();");
     }
 
     @Override
@@ -1050,5 +1137,11 @@ public class MainActivity extends Activity {
         isForeground = true;
         if (wv != null) wv.resumeTimers();
         if (playerWv != null) playerWv.resumeTimers();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        cleanupAndExit();
     }
 }

@@ -2220,18 +2220,20 @@ function ensureSilentAudio() {
   }
 }
 
-function startSilentKeepAlive() {
-  ensureSilentAudio();
-  if (silentAudioEl && silentAudioEl.paused) {
-    silentAudioEl.play().catch(() => {});
-  }
-}
+function startSilentKeepAlive() {}
 
 function stopSilentKeepAlive() {
   if (silentAudioEl && !silentAudioEl.paused) {
-    silentAudioEl.pause();
+    try { silentAudioEl.pause(); } catch (e) {}
   }
 }
+
+// Pausar reproducción inmediatamente al salir de la app o apagar pantalla (sin segundo plano)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    doPause();
+  }
+});
 
 // 2. Wake Lock API (para mantener pantalla activa cuando se ve Karaoke o TV)
 let screenWakeLock = null;
