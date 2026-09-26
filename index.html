@@ -524,7 +524,37 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
   }
+  .pl-drag-handle {
+    display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 38px; color: #8a7a5c; font-size: 16px;
+    cursor: grab; touch-action: none; user-select: none;
+    -webkit-user-select: none; flex-shrink: 0;
+    transition: color 0.15s ease;
+  }
+  .pl-drag-handle:active { cursor: grabbing; color: #f0872c; }
+  .pl-item.dragging {
+    opacity: 0.55;
+    background: #ffecd1 !important;
+    border-color: #f0872c !important;
+    box-shadow: 0 4px 14px rgba(240, 135, 44, 0.4);
+    transform: scale(1.02);
+  }
+  .pl-item.drag-over {
+    border-top: 3px solid #f0872c !important;
+  }
+  .result-actions {
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  }
+  .result-btn-next {
+    background: #ffb020; color: #1a1612; border: none;
+    font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 800;
+    padding: 6px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: all 0.15s ease;
+  }
+  .result-btn-next:active { transform: scale(0.96); background: #e69d10; }
+  .result-btn-next.added { background: #4caf50; color: #fff; }
   .pl-item.current { border-color: #f0872c; background: #fff6e8; }
   .pl-item img { width: 40px; height: 40px; border-radius: 4px; }
   .pl-info { flex: 1; min-width: 0; }
@@ -804,6 +834,11 @@
   body.dark .result-status { color: #bfae8d; }
   body.dark .pl-item { background: #2e2a26; border-color: #4a443c; }
   body.dark .pl-item.current { border-color: #f0872c; background: #332e28; }
+  body.dark .pl-item.dragging { background: #3d352b !important; border-color: #ffb020 !important; }
+  body.dark .pl-drag-handle { color: #7a6e5a; }
+  body.dark .pl-drag-handle:active { color: #ffb020; }
+  body.dark .result-btn-next { background: #ffb020; color: #14120f; }
+  body.dark .result-btn-next.added { background: #4caf50; color: #fff; }
   body.dark .pl-title { color: #eee6d6; }
   body.dark .pl-author { color: #a89877; }
   body.dark .pl-btn {
@@ -3813,20 +3848,52 @@ function syncPlaylistSingleFile() {
   }, 400);
 }
 
-function savePL(trackListModified = false) {
+function savePL(trackListModified = true) {
   localStorage.setItem(PL_KEY, JSON.stringify(playlist));
   updatePlBar();
   renderPL();
-  // Solamente sincroniza y sobreescribe el archivo si se agregó o quitó un tema de la playlist
+  // Sincroniza y sobreescribe siempre el archivo único en Descargas
   if (trackListModified) {
     syncPlaylistSingleFile();
   }
 }
+
+// Agrega un track a la cola de reproducción inmediatamente después del tema actual
+function queueNextInPlaylist(track) {
+  if (!track || !track.id) return;
+  const newItem = {
+    id: track.id,
+    title: track.title || 'Tema',
+    author: track.author || '',
+    thumb: track.thumb || '',
+    local: track.local || ''
+  };
+  // Si ya existía en la lista, retirarlo para reubicarlo como siguiente
+  const existingIdx = playlist.findIndex(t => t.id === newItem.id);
+  if (existingIdx !== -1) {
+    playlist.splice(existingIdx, 1);
+  }
+
+  // Insertar en la posición próxima siguiente al tema actual
+  const currentIdx = playlist.findIndex(t => t.id === current.id);
+  let insertIdx = 0;
+  if (currentIdx !== -1) {
+    insertIdx = currentIdx + 1;
+  } else {
+    insertIdx = playlist.length > 0 ? 0 : 0;
+  }
+
+  playlist.splice(insertIdx, 0, newItem);
+  savePL(true);
+  flashTitle('➕ "' + (newItem.title.slice(0, 24)) + '" será el siguiente tema');
+}
+
 function updatePlBar() {
   document.getElementById('plBarText').textContent =
     '📼 PLAYLIST · ' + playlist.length + (playlist.length === 1 ? ' TEMA' : ' TEMAS');
   document.getElementById('plCount').textContent = playlist.length;
 }
+
 function renderPL() {
   if (!playlist.length) {
     plList.innerHTML = '<div class="result-status">Playlist vacía.<br>Pon música y pulsa ● REC para grabar temas 🎙️</div>';
@@ -3841,17 +3908,19 @@ function renderPL() {
     const div = document.createElement('div');
     div.className = 'pl-item' + (t.id === current.id ? ' current' : '');
     div.dataset.idx = i;
+    div.draggable = true;
     div.innerHTML =
+      '<div class="pl-drag-handle" title="Mantén presionado y arrastra para reordenar">⋮⋮</div>' +
       '<img src="' + coverUrl + '">' +
       '<div class="pl-info">' +
         '<div class="pl-title">' + t.title + (t.local ? ' 💾' : '') + '</div>' +
         '<div class="pl-author">' + (t.author || 'YouTube') + '</div>' +
       '</div>' +
       '<div class="pl-actions">' +
-        '<button class="pl-btn play" data-act="play" data-i="' + i + '">▶</button>' +
-        '<button class="pl-btn" data-act="up" data-i="' + i + '">▲</button>' +
-        '<button class="pl-btn" data-act="down" data-i="' + i + '">▼</button>' +
-        '<button class="pl-btn del" data-act="del" data-i="' + i + '">✕</button>' +
+        '<button class="pl-btn play" data-act="play" data-i="' + i + '" title="Reproducir">▶</button>' +
+        '<button class="pl-btn" data-act="up" data-i="' + i + '" title="Subir">▲</button>' +
+        '<button class="pl-btn" data-act="down" data-i="' + i + '" title="Bajar">▼</button>' +
+        '<button class="pl-btn del" data-act="del" data-i="' + i + '" title="Eliminar">✕</button>' +
       '</div>';
     plList.appendChild(div);
 
@@ -3869,15 +3938,114 @@ function renderPL() {
       }, i * 200);
     }
   });
+
+  setupPlaylistDragAndDrop();
 }
+
+let draggedItemIndex = null;
+function setupPlaylistDragAndDrop() {
+  const items = plList.querySelectorAll('.pl-item');
+  items.forEach(item => {
+    item.addEventListener('dragstart', e => {
+      draggedItemIndex = +item.dataset.idx;
+      item.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', draggedItemIndex);
+      }
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      items.forEach(it => it.classList.remove('drag-over'));
+      item.classList.add('drag-over');
+    });
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over');
+    });
+    item.addEventListener('drop', e => {
+      e.preventDefault();
+      item.classList.remove('drag-over');
+      const targetIdx = +item.dataset.idx;
+      if (draggedItemIndex !== null && draggedItemIndex !== targetIdx && targetIdx >= 0 && targetIdx < playlist.length) {
+        const [moved] = playlist.splice(draggedItemIndex, 1);
+        playlist.splice(targetIdx, 0, moved);
+        savePL(true);
+      }
+      draggedItemIndex = null;
+    });
+    item.addEventListener('dragend', () => {
+      items.forEach(it => { it.classList.remove('dragging'); it.classList.remove('drag-over'); });
+      draggedItemIndex = null;
+    });
+  });
+}
+
+// Soporte táctil fluido de arrastrar y soltar para reordenar en móviles
+let touchDragIdx = null;
+let touchDragEl = null;
+
+plList.addEventListener('touchstart', e => {
+  const handle = e.target.closest('.pl-drag-handle');
+  if (!handle) return;
+  const item = handle.closest('.pl-item');
+  if (!item) return;
+  touchDragIdx = +item.dataset.idx;
+  touchDragEl = item;
+  item.classList.add('dragging');
+  if (navigator.vibrate) navigator.vibrate(25);
+}, { passive: true });
+
+plList.addEventListener('touchmove', e => {
+  if (touchDragIdx === null || !touchDragEl) return;
+  const touch = e.touches[0];
+  if (!touch) return;
+  const overEl = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.pl-item');
+  plList.querySelectorAll('.pl-item').forEach(it => it.classList.remove('drag-over'));
+  if (overEl && overEl !== touchDragEl) {
+    overEl.classList.add('drag-over');
+  }
+}, { passive: true });
+
+plList.addEventListener('touchend', e => {
+  if (touchDragIdx === null || !touchDragEl) return;
+  const changedTouch = e.changedTouches[0];
+  let targetIdx = null;
+  if (changedTouch) {
+    const overEl = document.elementFromPoint(changedTouch.clientX, changedTouch.clientY)?.closest('.pl-item');
+    if (overEl) {
+      targetIdx = +overEl.dataset.idx;
+    }
+  }
+  plList.querySelectorAll('.pl-item').forEach(it => {
+    it.classList.remove('dragging');
+    it.classList.remove('drag-over');
+  });
+
+  if (targetIdx !== null && targetIdx !== touchDragIdx && targetIdx >= 0 && targetIdx < playlist.length) {
+    const [moved] = playlist.splice(touchDragIdx, 1);
+    playlist.splice(targetIdx, 0, moved);
+    savePL(true);
+    if (navigator.vibrate) navigator.vibrate(35);
+  }
+  touchDragIdx = null;
+  touchDragEl = null;
+});
+
+plList.addEventListener('touchcancel', () => {
+  if (touchDragEl) touchDragEl.classList.remove('dragging');
+  plList.querySelectorAll('.pl-item').forEach(it => it.classList.remove('drag-over'));
+  touchDragIdx = null;
+  touchDragEl = null;
+});
 
 plList.addEventListener('click', e => {
   const btn = e.target.closest('.pl-btn');
   if (!btn) return;
   const i = +btn.dataset.i, act = btn.dataset.act;
   if (act === 'play') { const t = playlist[i]; closePL(); playById(t.id, t.title, t.thumb, t.author); }
-  else if (act === 'up' && i > 0) { [playlist[i - 1], playlist[i]] = [playlist[i], playlist[i - 1]]; savePL(false); }
-  else if (act === 'down' && i < playlist.length - 1) { [playlist[i + 1], playlist[i]] = [playlist[i], playlist[i + 1]]; savePL(false); }
+  else if (act === 'up' && i > 0) { [playlist[i - 1], playlist[i]] = [playlist[i], playlist[i - 1]]; savePL(true); }
+  else if (act === 'down' && i < playlist.length - 1) { [playlist[i + 1], playlist[i]] = [playlist[i], playlist[i + 1]]; savePL(true); }
   else if (act === 'del') { playlist.splice(i, 1); savePL(true); }
 });
 document.getElementById('plClear').onclick = () => {
@@ -4395,7 +4563,23 @@ async function searchMusic(q) {
         '<div class="result-info">' +
           '<div class="result-title">' + it.title + '</div>' +
           '<div class="result-meta">' + it.author + (it.dur ? ' · ' + fmt(it.dur) : '') + '</div>' +
+        '</div>' +
+        '<div class="result-actions">' +
+          '<button class="result-btn-next" title="Agregar a la cola como siguiente tema">➕ SIGUIENTE</button>' +
         '</div>';
+
+      const btnNext = div.querySelector('.result-btn-next');
+      btnNext.onclick = (e) => {
+        e.stopPropagation();
+        queueNextInPlaylist(it);
+        btnNext.textContent = '✔ EN COLA';
+        btnNext.classList.add('added');
+        setTimeout(() => {
+          btnNext.textContent = '➕ SIGUIENTE';
+          btnNext.classList.remove('added');
+        }, 1800);
+      };
+
       div.onclick = () => { closeSearch(); playById(it.id, it.title, it.thumb, it.author); };
       list.appendChild(div);
     });
@@ -4564,11 +4748,29 @@ async function playById(id, title, thumb, author) {
 
 function autoNext() {
   setReels(false);
+  if (!playlist || !playlist.length) {
+    setLed('none');
+    showTitle('⏹ Fin de la cinta');
+    return;
+  }
   const idx = playlist.findIndex(t => t.id === current.id);
-  if (idx > -1 && idx < playlist.length - 1) {
-    const n = playlist[idx + 1];
-    playById(n.id, n.title, n.thumb, n.author);
-  } else { setLed('none'); showTitle('⏹ Fin de la cinta'); }
+  let nextTrack = null;
+  if (idx >= 0 && idx < playlist.length - 1) {
+    nextTrack = playlist[idx + 1];
+  } else if (idx === playlist.length - 1) {
+    // Reiniciar ciclo en bucle desde el primer tema de la lista
+    nextTrack = playlist[0];
+  } else if (idx === -1 && playlist.length > 0) {
+    nextTrack = playlist[0];
+  }
+
+  if (nextTrack) {
+    debug('⏩ Siguiente tema automático: ' + nextTrack.title);
+    playById(nextTrack.id, nextTrack.title, nextTrack.thumb, nextTrack.author);
+  } else {
+    setLed('none');
+    showTitle('⏹ Fin de la cinta');
+  }
 }
 
 /* ============ CONTROLES ============ */
@@ -4684,10 +4886,33 @@ document.getElementById('urlInput').addEventListener('keypress', e => {
   if (e.key === 'Enter') document.getElementById('urlGo').click();
 });
 
+/* ============ AUTO-LOAD PLAYLIST DESDE DESCARGAS ============ */
+window.onAutoLoadPlaylist = function (text) {
+  if (!text) return;
+  try {
+    const d = JSON.parse(text);
+    const tracks = Array.isArray(d) ? d : (d.tracks || []);
+    const clean = tracks.filter(t => t && t.id).map(t => ({
+      id: t.id, title: t.title || '', author: t.author || '',
+      thumb: t.thumb || '', local: t.local || ''
+    }));
+    if (clean.length > 0) {
+      playlist = clean;
+      localStorage.setItem(PL_KEY, JSON.stringify(playlist));
+      updatePlBar();
+      renderPL();
+      debug('📼 Playlist cargada automáticamente desde Descargas (' + clean.length + ' temas)');
+    }
+  } catch (e) {
+    console.warn('Error al auto-cargar playlist:', e);
+  }
+};
+
 /* ============ INIT ============ */
 updatePlBar();
 renderPL();
-if (HAS_BRIDGE && !playlist.length) {
+if (HAS_BRIDGE) {
+  // Buscar siempre al iniciar si hay archivos de playlist guardados en descargas del almacenamiento local
   try { Android.loadPlaylistBackup(); } catch (e) {}
 }
 debug('Listo · ' + (HAS_BRIDGE ? 'Android + Bridge' : (IS_ANDROID ? 'Android' : 'Desktop')));

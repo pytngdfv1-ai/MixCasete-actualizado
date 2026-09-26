@@ -409,8 +409,14 @@ public class MainActivity extends Activity {
         public void loadPlaylistBackup() {
             new Thread(() -> {
                 final String s = readPlaylistFromDownloads();
-                if (s != null) runOnUiThread(() -> wv.evaluateJavascript(
-                    "window.onPlaylistImported && window.onPlaylistImported(" + JSONObject.quote(s) + ")", null));
+                if (s != null && !s.trim().isEmpty()) {
+                    runOnUiThread(() -> {
+                        wv.evaluateJavascript(
+                            "window.onAutoLoadPlaylist && window.onAutoLoadPlaylist(" + JSONObject.quote(s) + ")", null);
+                        wv.evaluateJavascript(
+                            "window.onPlaylistImported && window.onPlaylistImported(" + JSONObject.quote(s) + ")", null);
+                    });
+                }
             }).start();
         }
     }
@@ -454,17 +460,17 @@ public class MainActivity extends Activity {
 
     /* ============ RESPALDO ÚNICO DE PLAYLIST ============ */
 
-    /* Busca TODOS los respaldos existentes (MixCasete_playlist*.json) */
+    /* Busca TODOS los respaldos existentes (MixCasete_playlist*.json o *playlist*.json) */
     private List<Uri> findAllPlaylistUris() {
         List<Uri> out = new ArrayList<>();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return out;
         try {
             Cursor c = getContentResolver().query(
                     MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                    new String[]{ MediaStore.Downloads._ID },
-                    MediaStore.Downloads.DISPLAY_NAME + " LIKE ?",
-                    new String[]{ "MixCasete_playlist%" },
-                    MediaStore.Downloads._ID + " ASC");
+                    new String[]{ MediaStore.Downloads._ID, MediaStore.Downloads.DATE_MODIFIED },
+                    MediaStore.Downloads.DISPLAY_NAME + " LIKE ? OR " + MediaStore.Downloads.DISPLAY_NAME + " LIKE ?",
+                    new String[]{ "%playlist%.json", "%MixCasete%.json" },
+                    MediaStore.Downloads.DATE_MODIFIED + " DESC");
             if (c != null) {
                 while (c.moveToNext()) {
                     long id = c.getLong(0);
@@ -593,24 +599,65 @@ public class MainActivity extends Activity {
     }
 
     private String readPlaylistFromDownloads() {
+        // 1. Intentar leer desde MediaStore Downloads (Android 10+)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 List<Uri> all = findAllPlaylistUris();
-                if (all.isEmpty()) return null;
-                InputStream is = getContentResolver().openInputStream(all.get(0));
-                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
-                is.close();
-                return bo.toString("UTF-8");
-            } else {
-                File f = new File(Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DOWNLOADS), "MixCasete_playlist.json");
-                if (!f.exists()) return null;
-                return new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8");
+                for (Uri u : all) {
+                    try (InputStream is = getContentResolver().openInputStream(u)) {
+                        if (is != null) {
+                            String s = readAll(is);
+                            if (isValidPlaylistJson(s)) return s;
+                        }
+                    } catch (Exception ignored) {}
+                }
             }
-        } catch (Exception e) { return null; }
+        } catch (Exception ignored) {}
+
+        // 2. Intentar leer desde carpeta física Download/
+        try {
+            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            if (dir != null && dir.exists()) {
+                File[] matches = dir.listFiles((d, name) -> {
+                    String lower = name.toLowerCase();
+                    return lower.endsWith(".json") && (lower.contains("playlist") || lower.contains("mixcasete"));
+                });
+                if (matches != null && matches.length > 0) {
+                    java.util.Arrays.sort(matches, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                    for (File f : matches) {
+                        try {
+                            String s = new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8");
+                            if (isValidPlaylistJson(s)) return s;
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // 3. Fallback al almacenamiento interno privado de la app
+        try {
+            File internalFile = new File(getFilesDir(), "MixCasete_playlist.json");
+            if (internalFile.exists()) {
+                String s = new String(java.nio.file.Files.readAllBytes(internalFile.toPath()), "UTF-8");
+                if (isValidPlaylistJson(s)) return s;
+            }
+        } catch (Exception ignored) {}
+
+        return null;
+    }
+
+    private boolean isValidPlaylistJson(String s) {
+        if (s == null || s.trim().isEmpty()) return false;
+        try {
+            JSONObject j = new JSONObject(s);
+            if (j.has("tracks") || j.has("app")) return true;
+        } catch (Exception e) {
+            try {
+                JSONArray arr = new JSONArray(s);
+                return arr.length() > 0;
+            } catch (Exception ignored) {}
+        }
+        return false;
     }
 
     /* ============ EXTRACCIÓN DE AUDIO ============ */
