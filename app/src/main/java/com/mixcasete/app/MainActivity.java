@@ -39,6 +39,7 @@ import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,7 @@ public class MainActivity extends Activity {
     private android.widget.TextView videoCloseBtn;
 
     private boolean polling = false;
+    private boolean isForeground = false;
     private int noVideoCount = 0;
     private boolean triedAlt = false;
     private String lastId = null;
@@ -681,7 +683,64 @@ public class MainActivity extends Activity {
     private String nativePlayer(String id) {
         String r = newpipeExtract(id);
         if (r != null) return r;
+        r = innertubeExtract(id);
+        if (r != null) return r;
         return fromInstances(id);
+    }
+
+    private String innertubeExtract(String id) {
+        try {
+            URL url = new URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(7000);
+            conn.setReadTimeout(9000);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("User-Agent", "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)");
+            conn.setDoOutput(true);
+
+            JSONObject body = new JSONObject();
+            JSONObject ctx = new JSONObject();
+            JSONObject client = new JSONObject();
+            client.put("clientName", "IOS");
+            client.put("clientVersion", "19.45.4");
+            client.put("deviceModel", "iPhone16,2");
+            client.put("hl", "es");
+            client.put("gl", "US");
+            ctx.put("client", client);
+            body.put("context", ctx);
+            body.put("videoId", id);
+
+            byte[] out = body.toString().getBytes(StandardCharsets.UTF_8);
+            OutputStream os = conn.getOutputStream();
+            os.write(out);
+            os.close();
+
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                String resp = readAll(conn.getInputStream());
+                JSONObject j = new JSONObject(resp);
+                JSONObject sd = j.optJSONObject("streamingData");
+                if (sd != null) {
+                    JSONArray adaptive = sd.optJSONArray("adaptiveFormats");
+                    if (adaptive != null) {
+                        for (int i = 0; i < adaptive.length(); i++) {
+                            JSONObject f = adaptive.optJSONObject(i);
+                            if (f == null) continue;
+                            String mime = f.optString("mimeType", "");
+                            String u = f.optString("url", "");
+                            if (mime.contains("audio/mp4") && !u.isEmpty()) {
+                                JSONObject vd = j.optJSONObject("videoDetails");
+                                String title = vd != null ? vd.optString("title", "") : "";
+                                String author = vd != null ? vd.optString("author", "") : "";
+                                return buildOut(u, title, author);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private String fromInstances(String id) {
@@ -847,6 +906,7 @@ public class MainActivity extends Activity {
     }
 
     private void tap() {
+        if (!isForeground) return;
         long t = SystemClock.uptimeMillis();
         float cx = Math.max(1, playerWv.getWidth() / 2f);
         float cy = Math.max(1, playerWv.getHeight() / 2f);
@@ -859,6 +919,7 @@ public class MainActivity extends Activity {
     }
 
     private void enforce() {
+        if (!isForeground) return;
         playerWv.evaluateJavascript(
             "(function(){var v=document.querySelector('video');" +
             "if(!v)return 'novideo';" +
@@ -875,6 +936,12 @@ public class MainActivity extends Activity {
         final Runnable[] r = new Runnable[1];
         r[0] = () -> {
             if (!polling) return; // se cerró el video: no seguir sondeando
+            if (!isForeground) {
+                // Si la app está en segundo plano o pantalla apagada, no saturar CPU
+                // ni interferir con la pantalla de bloqueo
+                if (polling) wv.postDelayed(r[0], 2500);
+                return;
+            }
             playerWv.evaluateJavascript(
                 "(function(){var v=document.querySelector('video');if(!v)return null;" +
                 "return JSON.stringify({t:v.currentTime||0,p:v.paused,e:v.ended,m:v.muted});})()",
@@ -923,12 +990,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        // Mantener WebViews activas para que el audio siga en segundo plano
+        isForeground = false;
+        try {
+            // Liberar flag para que la pantalla de bloqueo de Android funcione normalmente
+            getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } catch (Exception ignored) {}
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        isForeground = true;
         if (wv != null) wv.resumeTimers();
         if (playerWv != null) playerWv.resumeTimers();
     }

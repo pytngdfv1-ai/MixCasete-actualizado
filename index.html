@@ -3367,7 +3367,6 @@ window.onNativePlayerEvent = function (event) {
 function fbLoad(id) {
   mode = 'bridge'; setLed('bridge'); embedPos = 0;
   startSilentKeepAlive();
-  requestScreenWakeLock();
   updateMediaSessionMetadata(current, true);
   syncTvPanelUI(current, true);
   if (HAS_BRIDGE) {
@@ -3383,7 +3382,6 @@ function fbLoad(id) {
 }
 function fbPlay()  {
   startSilentKeepAlive();
-  requestScreenWakeLock();
   updateMediaSessionMetadata(current, true);
   syncTvPanelUI(current, true);
   if (mode === 'bridge') { try { Android.resumeYT(); } catch (e) {} }
@@ -4118,6 +4116,8 @@ function loadLists() {
 
 /* ============ NATIVA WEB ============ */
 const YT_CLIENTS = [
+  { clientName: 'IOS', clientVersion: '19.45.4', deviceModel: 'iPhone16,2',
+    userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)' },
   { clientName: 'ANDROID', clientVersion: '19.09.37', androidSdkVersion: 30,
     userAgent: 'com.google.android.youtube/19.09.37 (Linux; U; Android 11; en_US) gzip' },
   { clientName: 'ANDROID_MUSIC', clientVersion: '7.16.50', androidSdkVersion: 30,
@@ -4470,7 +4470,6 @@ function raceStreams(id, ms) {
 /* ============ REPRODUCCIÓN ============ */
 function startStream(url, title, src) {
   stopSilentKeepAlive();
-  requestScreenWakeLock();
   updateMediaSessionMetadata(current, true);
   syncTvPanelUI(current, true);
   loadKaraokeForTrack(current);
@@ -4574,7 +4573,6 @@ function autoNext() {
 
 /* ============ CONTROLES ============ */
 function doPlay() {
-  requestScreenWakeLock();
   if (mode === 'bridge') startSilentKeepAlive();
   updateMediaSessionMetadata(current, true);
   syncTvPanelUI(current, true);

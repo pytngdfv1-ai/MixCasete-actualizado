@@ -14,11 +14,14 @@ import android.media.MediaMetadata;
 import android.media.MediaPlayer;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
+import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.view.KeyEvent;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Servicio de reproducción en primer plano.
@@ -229,7 +232,16 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                     .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build());
-            player.setDataSource(url);
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                Map<String, String> headers = new HashMap<>();
+                headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+                headers.put("Referer", "https://www.youtube.com/");
+                player.setDataSource(this, Uri.parse(url), headers);
+            } else if (url.startsWith("file://")) {
+                player.setDataSource(this, Uri.parse(url));
+            } else {
+                player.setDataSource(url);
+            }
             player.setOnPreparedListener(this);
             player.setOnCompletionListener(this);
             player.setOnErrorListener(this);
