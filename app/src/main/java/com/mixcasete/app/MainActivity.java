@@ -218,6 +218,24 @@ public class MainActivity extends Activity {
         }
     }
 
+    public void hideVideoOverlay() {
+        runOnUiThread(() -> {
+            try {
+                stopPoll();
+                if (playerWv != null) {
+                    playerWv.loadUrl("about:blank");
+                    playerWv.setAlpha(0f);
+                    playerWv.setLayoutParams(new FrameLayout.LayoutParams(1, 1));
+                }
+                if (videoCloseBtn != null) videoCloseBtn.setVisibility(android.view.View.GONE);
+                if (wv != null) {
+                    wv.evaluateJavascript(
+                        "window.onVideoOverlayClosed && window.onVideoOverlayClosed()", null);
+                }
+            } catch (Exception e) {}
+        });
+    }
+
     private synchronized void releaseNativePlayer() {
         if (nativePlayer != null) {
             try {
@@ -329,17 +347,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void hideVideoOverlay() {
-            runOnUiThread(() -> {
-                try {
-                    stopPoll();
-                    playerWv.loadUrl("about:blank");
-                    playerWv.setAlpha(0f);
-                    playerWv.setLayoutParams(new FrameLayout.LayoutParams(1, 1));
-                    if (videoCloseBtn != null) videoCloseBtn.setVisibility(android.view.View.GONE);
-                    wv.evaluateJavascript(
-                        "window.onVideoOverlayClosed && window.onVideoOverlayClosed()", null);
-                } catch (Exception e) {}
-            });
+            MainActivity.this.hideVideoOverlay();
         }
 
         @JavascriptInterface
