@@ -1079,9 +1079,9 @@
   }
 
   /* ==========================================================
-     DISPOSITIVOS MÓVILES: EXCLUSIVAMENTE VERTICAL (NUNCA HORIZONTAL)
+     DISPOSITIVOS MÓVILES: VISTA VERTICAL (PORTRAIT)
      ========================================================== */
-  @media (max-width: 900px), (pointer: coarse) {
+  @media (orientation: portrait) and (max-width: 900px), (orientation: portrait) and (pointer: coarse) {
     html, body {
       overflow-x: hidden !important;
       max-width: 100vw !important;
@@ -1247,93 +1247,211 @@
 
   }
 
-  /* ACTIVACIÓN MODO HORIZONTAL / TV (EN CUALQUIER DISPOSITIVO AL GIRAR O ACTIVAR MODO TV) */
+  /* ==========================================================
+     VISTA HORIZONTAL / MODO WIDESCREEN & TV (TODOS LOS DISPOSITIVOS)
+     ========================================================== */
   @media (orientation: landscape) {
-    body:not(.classic-mode) { overflow: hidden; }
-    body:not(.classic-mode) .app-split-container {
-      width: 100vw; height: 100vh; max-height: 100vh;
-      display: flex !important; flex-direction: row !important;
-      align-items: stretch !important; justify-content: stretch !important;
-      padding: 6px 12px !important; gap: 12px !important; box-sizing: border-box !important;
+    html, body {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
       overflow: hidden !important;
     }
+
+    .app-split-container,
+    body.classic-mode .app-split-container,
+    body:not(.classic-mode) .app-split-container {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
+      max-width: 100vw !important;
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: stretch !important;
+      justify-content: space-between !important;
+      padding: 6px 10px !important;
+      gap: 10px !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+      margin: 0 !important;
+    }
+
+    .split-col-player,
+    body.classic-mode .split-col-player,
     body:not(.classic-mode) .split-col-player {
-      flex: 0 0 44% !important; max-width: 48% !important; height: 100% !important;
-      overflow-y: auto !important; overflow-x: hidden !important;
-      display: flex !important; align-items: center !important; justify-content: center !important;
-      padding: 4px !important;
+      flex: 0 0 45% !important;
+      max-width: 48% !important;
+      height: 100% !important;
+      max-height: 100% !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 0 !important;
+      margin: 0 !important;
     }
+
+    .split-col-player .device,
+    body.classic-mode .split-col-player .device,
     body:not(.classic-mode) .split-col-player .device {
-      width: 100% !important; max-width: 380px !important; max-height: 100% !important;
+      width: 100% !important;
+      max-width: 420px !important;
+      height: 100% !important;
+      max-height: calc(100vh - 12px) !important;
+      padding: 8px 12px !important;
       margin: auto !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      box-sizing: border-box !important;
     }
+
+    .split-col-player .album-area,
+    body.classic-mode .split-col-player .album-area,
     body:not(.classic-mode) .split-col-player .album-area {
       display: none !important;
     }
+
+    .split-col-player .cassette-window,
+    body.classic-mode .split-col-player .cassette-window,
     body:not(.classic-mode) .split-col-player .cassette-window {
-      margin-top: 36px !important;
+      margin: 4px 0 !important;
+      padding: 6px 10px !important;
+      flex: 1 1 auto !important;
+      max-height: 165px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
     }
+
+    .split-col-player .reel {
+      width: 44px !important;
+      height: 44px !important;
+    }
+
+    .split-col-player .tape-window {
+      width: 76px !important;
+      height: 24px !important;
+    }
+
+    .split-col-player .search-strip {
+      margin-top: 4px !important;
+      padding: 5px 10px !important;
+      font-size: 11px !important;
+    }
+
+    .split-col-player .buttons-area {
+      margin-top: 4px !important;
+    }
+
+    .split-col-player .piano-btn {
+      height: 48px !important;
+    }
+
+    .split-col-player .bottom-bar {
+      margin-top: 4px !important;
+      padding: 4px 8px !important;
+    }
+
+    .split-col-tv,
+    body.classic-mode .split-col-tv,
     body:not(.classic-mode) .split-col-tv {
-      flex: 1 1 56% !important; max-width: 56% !important; height: 100% !important;
-      display: flex !important; flex-direction: column !important;
-      border-radius: 20px !important;
+      display: flex !important;
+      flex: 1 1 55% !important;
+      max-width: 55% !important;
+      height: 100% !important;
+      max-height: calc(100vh - 12px) !important;
+      border-radius: 18px !important;
       background: radial-gradient(circle at 65% 25%, #25201a 0%, #151210 60%, #0a0807 100%) !important;
       border: 2px solid #3d352b !important;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.08) !important;
-      position: relative !important; overflow: hidden !important; z-index: 5 !important;
+      box-shadow: 0 16px 45px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.08) !important;
+      position: relative !important;
+      overflow: hidden !important;
+      z-index: 5 !important;
+      flex-direction: column !important;
+      margin: auto 0 !important;
     }
-    body:not(.classic-mode) .split-col-tv .tv-cover-section {
+
+    .split-col-tv .tv-header-bar {
+      padding: 4px 12px !important;
+      min-height: 38px !important;
+      height: 38px !important;
+      flex-shrink: 0 !important;
+    }
+
+    .split-col-tv .tv-content-container {
+      height: calc(100% - 38px) !important;
+      padding: 8px 10px !important;
+      gap: 10px !important;
       display: flex !important;
     }
-    body:not(.classic-mode) .split-col-tv .tv-lyrics-section {
+
+    .split-col-tv .tv-cover-section {
       display: flex !important;
+    }
+
+    .split-col-tv .tv-lyrics-section {
+      display: flex !important;
+    }
+
+    .split-col-tv .tv-vinyl-wrapper {
+      max-width: min(180px, 40vh) !important;
+      max-height: min(180px, 40vh) !important;
+      aspect-ratio: 1 / 1 !important;
+      margin: auto !important;
+    }
+
+    .split-col-tv .karaoke-line {
+      font-size: clamp(14px, 2.6vh, 20px) !important;
+      padding: 6px 10px !important;
+      line-height: 1.3 !important;
     }
   }
 
-  body.tv-split-active:not(.classic-mode) {
-    overflow: hidden !important;
-  }
-
-  /* ============ MODO REPRODUCTOR CLÁSICO ============ */
-  body.classic-mode {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
-  body.classic-mode .split-col-tv {
-    display: none !important;
-  }
-  body.classic-mode .app-split-container {
-    width: 100% !important;
-    max-width: 440px !important;
-    margin: 0 auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    padding: 10px 8px !important;
-    height: auto !important;
-    min-height: 100vh !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
-  body.classic-mode .split-col-player {
-    flex: none !important;
-    width: 100% !important;
-    max-width: 440px !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
-    display: block !important;
-    overflow: visible !important;
-  }
-  body.classic-mode .split-col-player .device {
-    max-width: 410px !important;
-    margin: 0 auto !important;
-  }
-  body.classic-mode .split-col-player .album-area {
-    display: flex !important;
-  }
-  body.classic-mode .split-col-player .cassette-window {
-    margin-top: 10px !important;
+  /* ============ MODO REPRODUCTOR CLÁSICO (SOLO EN VERTICAL) ============ */
+  @media (orientation: portrait) {
+    body.classic-mode {
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
+    body.classic-mode .split-col-tv {
+      display: none !important;
+    }
+    body.classic-mode .app-split-container {
+      width: 100% !important;
+      max-width: 440px !important;
+      margin: 0 auto !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+      padding: 10px 8px !important;
+      height: auto !important;
+      min-height: 100vh !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
+    body.classic-mode .split-col-player {
+      flex: none !important;
+      width: 100% !important;
+      max-width: 440px !important;
+      margin: 0 auto !important;
+      padding: 0 !important;
+      display: block !important;
+      overflow: visible !important;
+    }
+    body.classic-mode .split-col-player .device {
+      max-width: 410px !important;
+      margin: 0 auto !important;
+    }
+    body.classic-mode .split-col-player .album-area {
+      display: flex !important;
+    }
+    body.classic-mode .split-col-player .cassette-window {
+      margin-top: 10px !important;
+    }
   }
 
   /* PANEL DERECHO TV (COVER & KARAOKE) */
@@ -2765,11 +2883,24 @@ function toggleSplitTvMode(force) {
 
 // Inicializar preferencia de vista (Clásico o TV)
 const savedViewMode = localStorage.getItem('mixcasete_view_mode');
-if (savedViewMode === 'classic' || isMobileDevice) {
+if (savedViewMode === 'classic') {
   document.body.classList.add('classic-mode');
   document.body.classList.remove('tv-split-active');
   if (tvModeBtn) tvModeBtn.classList.remove('active');
 }
+
+// Adaptación automática y fluida al girar el dispositivo
+function checkDeviceOrientation() {
+  const isLandscape = window.innerWidth > window.innerHeight;
+  if (isLandscape) {
+    document.body.classList.remove('classic-mode');
+    document.body.classList.add('tv-split-active');
+    if (tvModeBtn) tvModeBtn.classList.add('active');
+  }
+}
+window.addEventListener('resize', checkDeviceOrientation);
+window.addEventListener('orientationchange', checkDeviceOrientation);
+checkDeviceOrientation();
 
 const optTvClassicMode = document.getElementById('optTvClassicMode');
 if (optTvClassicMode) {
