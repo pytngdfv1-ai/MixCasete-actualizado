@@ -357,8 +357,9 @@ public class MainActivity extends Activity {
                     if ("landscape".equalsIgnoreCase(mode)) {
                         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
                     } else if ("portrait".equalsIgnoreCase(mode)) {
-                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
                     } else {
+                        // Modo "sensor", "auto" o "unspecified": libre según los sensores del móvil
                         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
                     }
                 } catch (Exception ignored) {}
@@ -1106,12 +1107,20 @@ public class MainActivity extends Activity {
             hideVideoOverlay();
             return;
         }
-        // 2. Si hay historial dentro de la WebView principal, volver atrás
+        // 2. Si la pantalla está fijada en horizontal, restaurar orientación y modo normal
+        if (getRequestedOrientation() == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            if (wv != null) {
+                wv.evaluateJavascript("window.setClassicMode && window.setClassicMode(true)", null);
+            }
+            return;
+        }
+        // 3. Si hay historial dentro de la WebView principal, volver atrás
         if (wv != null && wv.canGoBack()) {
             wv.goBack();
             return;
         }
-        // 3. Salir completamente de la aplicación sin dejar nada en segundo plano
+        // 4. Salir completamente de la aplicación sin dejar nada en segundo plano
         cleanupAndExit();
     }
 

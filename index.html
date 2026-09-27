@@ -1064,30 +1064,6 @@
     max-width: 100% !important;
   }
 
-  .mobile-rotate-notice {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 999999;
-    background: radial-gradient(circle at 50% 30%, #2e2a26 0%, #171412 80%);
-    color: #f2e8d5;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    text-align: center;
-    font-family: 'Montserrat', sans-serif;
-  }
-  .mobile-rotate-icon {
-    font-size: 50px;
-    margin-bottom: 14px;
-    animation: rotateHint 2s infinite ease-in-out;
-  }
-  @keyframes rotateHint {
-    0%, 100% { transform: rotate(0deg); }
-    50% { transform: rotate(-90deg); }
-  }
-
   .app-split-container {
     width: 100%; min-height: 100vh;
     display: flex; justify-content: center; align-items: center;
@@ -1269,98 +1245,53 @@
       height: 100% !important;
     }
 
-    /* En móviles NUNCA se muestra horizontal: bloquear horizontal y requerir orientación vertical */
-    @media (orientation: landscape) and (max-width: 900px), (orientation: landscape) and (pointer: coarse) {
-      .app-split-container {
-        display: none !important;
-      }
-      .mobile-rotate-notice {
-        display: flex !important;
-      }
-    }
   }
 
-  /* ACTIVACIÓN MODO HORIZONTAL / TV (SOLO PARA ESCRITORIO CON RATÓN Y PANTALLA GRANDE >= 1024px) */
-  @media (orientation: landscape) and (min-width: 1024px) and (pointer: fine) {
-    body:not(.classic-mode):not(.mobile-device) { overflow: hidden; }
-    body:not(.classic-mode):not(.mobile-device) .app-split-container {
+  /* ACTIVACIÓN MODO HORIZONTAL / TV (EN CUALQUIER DISPOSITIVO AL GIRAR O ACTIVAR MODO TV) */
+  @media (orientation: landscape) {
+    body:not(.classic-mode) { overflow: hidden; }
+    body:not(.classic-mode) .app-split-container {
       width: 100vw; height: 100vh; max-height: 100vh;
-      display: flex; flex-direction: row;
-      align-items: stretch; justify-content: stretch;
-      padding: 10px 14px; gap: 14px; box-sizing: border-box;
-      overflow: hidden;
-    }
-    body:not(.classic-mode):not(.mobile-device) .split-col-player {
-      flex: 0 0 48%; max-width: 50%; height: 100%;
-      overflow-y: auto; overflow-x: hidden;
-      display: flex; align-items: center; justify-content: center;
-      padding: 4px;
-    }
-    body:not(.classic-mode):not(.mobile-device) .split-col-player .device {
-      width: 100%; max-width: 410px; max-height: 100%;
-      margin: auto;
-    }
-    /* Ocultar carátula en el lado del reproductor en modo horizontal / TV */
-    body:not(.classic-mode):not(.mobile-device) .split-col-player .album-area {
-      display: none !important;
-    }
-    body:not(.classic-mode):not(.mobile-device) .split-col-player .cassette-window {
-      margin-top: 48px !important;
-    }
-    body:not(.classic-mode):not(.mobile-device) .split-col-tv {
-      flex: 1 1 52%; max-width: 52%; height: 100%;
-      display: flex !important; flex-direction: column;
-      border-radius: 26px;
-      background: radial-gradient(circle at 65% 25%, #25201a 0%, #151210 60%, #0a0807 100%);
-      border: 2px solid #3d352b;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.08);
-      position: relative; overflow: hidden; z-index: 5;
-    }
-  }
-
-  body.tv-split-active:not(.classic-mode) {
-    overflow: hidden !important;
-  }
-  @media (min-width: 640px) and (orientation: landscape), (min-width: 960px) {
-    body.tv-split-active:not(.classic-mode) .app-split-container {
-      width: 100vw !important; height: 100vh !important; max-height: 100vh !important;
-      max-width: 100vw !important;
       display: flex !important; flex-direction: row !important;
       align-items: stretch !important; justify-content: stretch !important;
-      padding: 8px 12px !important; gap: 12px !important; box-sizing: border-box !important;
+      padding: 6px 12px !important; gap: 12px !important; box-sizing: border-box !important;
       overflow: hidden !important;
     }
-    body.tv-split-active:not(.classic-mode) .split-col-player {
-      flex: 0 0 46% !important; max-width: 48% !important; height: 100% !important;
+    body:not(.classic-mode) .split-col-player {
+      flex: 0 0 44% !important; max-width: 48% !important; height: 100% !important;
       overflow-y: auto !important; overflow-x: hidden !important;
       display: flex !important; align-items: center !important; justify-content: center !important;
       padding: 4px !important;
     }
-    body.tv-split-active:not(.classic-mode) .split-col-player .device {
-      width: 100% !important; max-width: 390px !important; max-height: 100% !important;
+    body:not(.classic-mode) .split-col-player .device {
+      width: 100% !important; max-width: 380px !important; max-height: 100% !important;
       margin: auto !important;
     }
-    body.tv-split-active:not(.classic-mode) .split-col-player .album-area {
+    body:not(.classic-mode) .split-col-player .album-area {
       display: none !important;
     }
-    body.tv-split-active:not(.classic-mode) .split-col-player .cassette-window {
-      margin-top: 40px !important;
+    body:not(.classic-mode) .split-col-player .cassette-window {
+      margin-top: 36px !important;
     }
-    body.tv-split-active:not(.classic-mode) .split-col-tv {
-      flex: 1 1 54% !important; max-width: 54% !important; height: 100% !important;
+    body:not(.classic-mode) .split-col-tv {
+      flex: 1 1 56% !important; max-width: 56% !important; height: 100% !important;
       display: flex !important; flex-direction: column !important;
-      border-radius: 22px !important;
+      border-radius: 20px !important;
       background: radial-gradient(circle at 65% 25%, #25201a 0%, #151210 60%, #0a0807 100%) !important;
       border: 2px solid #3d352b !important;
       box-shadow: 0 20px 50px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.08) !important;
       position: relative !important; overflow: hidden !important; z-index: 5 !important;
     }
-    body.tv-split-active:not(.classic-mode) .split-col-tv .tv-cover-section {
+    body:not(.classic-mode) .split-col-tv .tv-cover-section {
       display: flex !important;
     }
-    body.tv-split-active:not(.classic-mode) .split-col-tv .tv-lyrics-section {
+    body:not(.classic-mode) .split-col-tv .tv-lyrics-section {
       display: flex !important;
     }
+  }
+
+  body.tv-split-active:not(.classic-mode) {
+    overflow: hidden !important;
   }
 
   /* ============ MODO REPRODUCTOR CLÁSICO ============ */
@@ -2184,12 +2115,6 @@
   </div>
 </div>
 
-<div class="mobile-rotate-notice" id="mobileRotateNotice">
-  <div class="mobile-rotate-icon">📱</div>
-  <div style="font-family:'Oswald',sans-serif;font-size:22px;color:#ffb020;margin-bottom:8px;">GIRA TU TELÉFONO</div>
-  <div style="font-size:13px;color:#d8c9b0;max-width:320px;line-height:1.4;">MixCasete está optimizado para utilizarse verticalmente en móviles. Coloca tu dispositivo en posición vertical para continuar.</div>
-</div>
-
 <div id="hiddenYtContainer" style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;">
   <div id="hiddenYtPlayer"></div>
 </div>
@@ -2779,18 +2704,9 @@ if (tvProgressTrack) {
   });
 }
 
-// Detección estricta de dispositivo móvil: solo vertical (nunca horizontal)
+// Detección de dispositivo móvil
 const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-  (window.matchMedia && window.matchMedia('(pointer: coarse) and (max-width: 900px)').matches) ||
-  (window.innerWidth <= 850 && window.innerHeight > window.innerWidth);
-
-if (isMobileDevice) {
-  document.documentElement.classList.add('mobile-device');
-  document.body.classList.add('mobile-device');
-  if (screen.orientation && screen.orientation.lock) {
-    screen.orientation.lock('portrait').catch(() => {});
-  }
-}
+  (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
 // Controles de Modo TV
 const tvModeBtn = document.getElementById('tvModeBtn');
@@ -2826,7 +2742,7 @@ function setClassicMode(enable) {
       document.exitFullscreen().catch(() => {});
     }
     if (window.Android && window.Android.setOrientation) {
-      window.Android.setOrientation('portrait');
+      window.Android.setOrientation('sensor');
     }
     flashTitle('📼 Modo Reproductor Clásico');
   } else {
@@ -2837,10 +2753,8 @@ function setClassicMode(enable) {
     requestScreenWakeLock();
     if (window.Android && window.Android.setOrientation) {
       window.Android.setOrientation('landscape');
-    } else if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
     }
-    flashTitle('📺 Modo TV / Pantalla Dividida');
+    flashTitle('📺 Modo TV Horizontal');
   }
 }
 
