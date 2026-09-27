@@ -115,20 +115,32 @@ public class MainActivity extends Activity {
         /* Limpia respaldos duplicados de la playlist al abrir (una sola vez en fondo) */
         new Thread(() -> cleanupDuplicateBackups()).start();
 
-        requestNotifPermission();
+        requestAppPermissions();
 
         wv.loadUrl("file:///android_asset/index.html");
     }
 
-    /** Desde Android 13 (API 33) hay que pedir este permiso en tiempo de
-     *  ejecución o la notificación de reproducción (y sus controles en
-     *  pantalla de bloqueo) nunca se muestra, aunque esté en el manifiesto. */
-    private void requestNotifPermission() {
+    /** Permisos necesarios para notificaciones en segundo plano y almacenamiento de playlist */
+    private void requestAppPermissions() {
+        List<String> perms = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                     != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 501);
+                perms.add(android.Manifest.permission.POST_NOTIFICATIONS);
             }
+        }
+        if (Build.VERSION.SDK_INT <= 28) {
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                perms.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            }
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                perms.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+            }
+        }
+        if (!perms.isEmpty()) {
+            requestPermissions(perms.toArray(new String[0]), 501);
         }
     }
 
@@ -261,26 +273,55 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void nativePlay(final String url, final String title) {
-            runOnUiThread(() -> startNativePlayback(url));
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "play_url");
+                si.putExtra(PlaybackService.EXTRA_URL, url);
+                si.putExtra(PlaybackService.EXTRA_TITLE, title != null ? title : "Mix.Casete");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {
+                runOnUiThread(() -> startNativePlayback(url));
+            }
         }
 
         @JavascriptInterface
         public void nativePause() {
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "pause");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
             runOnUiThread(() -> pauseNativePlayer());
         }
 
         @JavascriptInterface
         public void nativeResume() {
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "play");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
             runOnUiThread(() -> resumeNativePlayer());
         }
 
         @JavascriptInterface
         public void nativeStop() {
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "stop");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
             runOnUiThread(() -> stopNativePlayer());
         }
 
         @JavascriptInterface
         public void nativeSeek(int sec) {
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_SEEK, sec);
+                si.putExtra(PlaybackService.EXTRA_CMD, "seek");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
             runOnUiThread(() -> seekNativePlayer(sec));
         }
 
@@ -387,16 +428,40 @@ public class MainActivity extends Activity {
             noVideoCount = 0;
             triedAlt = false;
 
+            // Iniciar o actualizar PlaybackService en primer plano para reproducción en segundo plano
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "bridge_play");
+                si.putExtra(PlaybackService.EXTRA_TITLE, title != null && !title.isEmpty() ? title : "Mix.Casete");
+                si.putExtra(PlaybackService.EXTRA_ARTIST, author != null ? author : "");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
+
             runOnUiThread(() -> playerWv.loadUrl(
                     "https://www.youtube.com/watch?v=" + id + "&playsinline=1"));
         }
         @JavascriptInterface public void resumeYT() {
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "play");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
             runOnUiThread(() -> { tap(); enforce(); });
         }
         @JavascriptInterface public void pauseYT() {
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "pause");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
             js("(function(){var v=document.querySelector('video');if(v)v.pause();})();");
         }
         @JavascriptInterface public void stopYT()  {
+            try {
+                Intent si = new Intent(MainActivity.this, PlaybackService.class);
+                si.putExtra(PlaybackService.EXTRA_CMD, "stop");
+                PlaybackService.start(MainActivity.this, si);
+            } catch (Exception ignored) {}
             runOnUiThread(() -> { polling = false; playerWv.loadUrl("about:blank"); });
         }
         @JavascriptInterface public void seekYT(final int sec) { js("(function(){var v=document.querySelector('video');if(v)v.currentTime=" + sec + ";})();"); }
@@ -485,8 +550,13 @@ public class MainActivity extends Activity {
                     runOnUiThread(() -> {
                         wv.evaluateJavascript(
                             "window.onAutoLoadPlaylist && window.onAutoLoadPlaylist(" + JSONObject.quote(s) + ")", null);
+                    });
+                } else {
+                    // El archivo MixCasete_playlist.json no existe aún en Descargas:
+                    // Solicitar a la app web que lo cree inmediatamente con los datos de playlist actuales
+                    runOnUiThread(() -> {
                         wv.evaluateJavascript(
-                            "window.onPlaylistImported && window.onPlaylistImported(" + JSONObject.quote(s) + ")", null);
+                            "window.onCreateDefaultPlaylistFile && window.onCreateDefaultPlaylistFile()", null);
                     });
                 }
             }).start();
@@ -686,10 +756,15 @@ public class MainActivity extends Activity {
             }
         } catch (Exception ignored) {}
 
-        // 2. Intentar leer desde carpeta física Download/
+        // 2. Intentar leer desde carpeta física Download/MixCasete_playlist.json
         try {
             File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
             if (dir != null && dir.exists()) {
+                File exactFile = new File(dir, "MixCasete_playlist.json");
+                if (exactFile.exists() && exactFile.canRead()) {
+                    String s = new String(java.nio.file.Files.readAllBytes(exactFile.toPath()), "UTF-8");
+                    if (isValidPlaylistJson(s)) return s;
+                }
                 File[] matches = dir.listFiles((d, name) -> {
                     String lower = name.toLowerCase();
                     return lower.endsWith(".json") && (lower.contains("playlist") || lower.contains("mixcasete"));
@@ -1139,13 +1214,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         isForeground = false;
-        try {
-            getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        } catch (Exception ignored) {}
-
-        // Sin reproducción en segundo plano: pausar inmediatamente
-        pauseNativePlayer();
-        js("(function(){var v=document.querySelector('video');if(v)v.pause();})();");
+        // Reproducción en segundo plano: NO pausar para que continúe sonando con la pantalla apagada o al cambiar de app
     }
 
     @Override

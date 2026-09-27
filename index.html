@@ -2263,7 +2263,14 @@ function ensureSilentAudio() {
   }
 }
 
-function startSilentKeepAlive() {}
+function startSilentKeepAlive() {
+  try {
+    ensureSilentAudio();
+    if (silentAudioEl && silentAudioEl.paused) {
+      silentAudioEl.play().catch(() => {});
+    }
+  } catch (e) {}
+}
 
 function stopSilentKeepAlive() {
   if (silentAudioEl && !silentAudioEl.paused) {
@@ -2271,12 +2278,7 @@ function stopSilentKeepAlive() {
   }
 }
 
-// Pausar reproducción inmediatamente al salir de la app o apagar pantalla (sin segundo plano)
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    doPause();
-  }
-});
+// Reproducción en segundo plano: no pausar la música al apagar pantalla o cambiar de aplicación
 
 // 2. Wake Lock API (para mantener pantalla activa cuando se ve Karaoke o TV)
 let screenWakeLock = null;
@@ -4933,7 +4935,7 @@ document.getElementById('urlInput').addEventListener('keypress', e => {
   if (e.key === 'Enter') document.getElementById('urlGo').click();
 });
 
-/* ============ AUTO-LOAD PLAYLIST DESDE DESCARGAS ============ */
+/* ============ GESTIÓN DE PLAYLIST EN DESCARGAS (MixCasete_playlist.json) ============ */
 window.onAutoLoadPlaylist = function (text) {
   if (!text) return;
   try {
@@ -4948,10 +4950,25 @@ window.onAutoLoadPlaylist = function (text) {
       localStorage.setItem(PL_KEY, JSON.stringify(playlist));
       updatePlBar();
       renderPL();
-      debug('📼 Playlist cargada automáticamente desde Descargas (' + clean.length + ' temas)');
+      flashTitle('📼 Playlist importada: MixCasete_playlist.json (' + clean.length + ' temas)');
+      debug('📼 Playlist cargada desde MixCasete_playlist.json (' + clean.length + ' temas)');
     }
   } catch (e) {
     console.warn('Error al auto-cargar playlist:', e);
+  }
+};
+
+window.onCreateDefaultPlaylistFile = function () {
+  // El archivo MixCasete_playlist.json no existía en Descargas -> Crearlo inmediatamente
+  const json = playlistJson();
+  if (typeof Android !== 'undefined' && typeof Android.exportPlaylist === 'function') {
+    try {
+      Android.exportPlaylist(json);
+      flashTitle('📁 MixCasete_playlist.json creado en Descargas ✔');
+      debug('📁 Archivo MixCasete_playlist.json creado automáticamente en Descargas');
+    } catch (e) {
+      console.warn('Error al crear MixCasete_playlist.json inicial:', e);
+    }
   }
 };
 
@@ -4959,7 +4976,7 @@ window.onAutoLoadPlaylist = function (text) {
 updatePlBar();
 renderPL();
 if (HAS_BRIDGE) {
-  // Buscar siempre al iniciar si hay archivos de playlist guardados en descargas del almacenamiento local
+  // Buscar siempre al abrir si existe MixCasete_playlist.json en Descargas; si no existe, crearlo
   try { Android.loadPlaylistBackup(); } catch (e) {}
 }
 debug('Listo · ' + (HAS_BRIDGE ? 'Android + Bridge' : (IS_ANDROID ? 'Android' : 'Desktop')));
